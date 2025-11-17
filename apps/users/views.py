@@ -1,4 +1,25 @@
 # apps/users/views.py
+"""
+Vistas y ViewSets para gestión de usuarios y autenticación.
+
+Este módulo define:
+- UserViewSet: CRUD de usuarios con permisos personalizados
+- ProfileViewSet: Gestión de perfiles de usuario
+- LoginView: Autenticación JWT con cookies
+- RefreshCookieView: Renovación de tokens
+- PasswordResetRequestView: Solicitud de recuperación de contraseña
+- PasswordResetConfirmView: Confirmación y cambio de contraseña
+- ChangePasswordView: Cambio de contraseña del usuario logueado
+- AdminChangePasswordView: Cambio de contraseña por admin
+
+Relaciones:
+- Usa: apps/users/models.py (User, Profile, PasswordResetToken)
+- Usa: apps/users/serializers.py (serializers para validación)
+- Usa: apps/users/permissions.py (UserPermission)
+- Usa: apps/workorders/models.py (Auditoria para logs)
+- Conectado a: apps/users/urls.py y apps/users/auth_urls.py
+"""
+
 from django.shortcuts import render
 
 from rest_framework import viewsets, permissions
@@ -16,26 +37,62 @@ from rest_framework_simplejwt.tokens import RefreshToken
 class UserViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gestionar Usuarios.
-    - El registro es público.
-    - La gestión (listar, editar, borrar) es solo para admins/supervisores.
-    - Un usuario puede editar sus propios datos.
+    
+    Proporciona endpoints CRUD completos:
+    - GET /api/v1/users/ → Listar usuarios
+    - POST /api/v1/users/ → Crear usuario (público)
+    - GET /api/v1/users/{id}/ → Ver usuario
+    - PUT/PATCH /api/v1/users/{id}/ → Editar usuario
+    - DELETE /api/v1/users/{id}/ → Eliminar usuario
+    - GET /api/v1/users/me/ → Ver perfil propio
+    - PUT/PATCH /api/v1/users/me/ → Editar perfil propio
+    
+    Permisos:
+    - Crear: Público (cualquiera puede registrarse)
+    - Listar: Solo ADMIN y SUPERVISOR
+    - Ver/Editar/Eliminar: ADMIN, SUPERVISOR, o el propio usuario
+    - /me/: Cualquier usuario autenticado puede ver/editar su propio perfil
+    
+    Relaciones:
+    - Usa UserPermission para control de acceso
+    - Al eliminar, limpia relaciones con inventory (si existen)
     """
-    queryset = User.objects.all().order_by('id')
-    serializer_class = UserSerializer
-    permission_classes = [UserPermission]
+    queryset = User.objects.all().order_by('id')  # QuerySet base: todos los usuarios ordenados por ID
+    serializer_class = UserSerializer  # Serializer por defecto
+    permission_classes = [UserPermission]  # Permisos personalizados
 
     def perform_destroy(self, instance):
-        """Eliminar usuario sin intentar eliminar relaciones de inventory que pueden no existir"""
+        """
+        Eliminar usuario de forma segura.
+        
+        Este método se ejecuta antes de eliminar un usuario.
+        Limpia relaciones con módulos que pueden no estar migrados
+        (inventory) para evitar errores de ForeignKey.
+        
+        Parámetros:
+        - instance: Instancia de User a eliminar
+        
+        Proceso:
+        1. Intenta limpiar MovimientoStock relacionados (si existe la tabla)
+        2. Intenta limpiar SolicitudRepuesto relacionadas (si existe la tabla)
+        3. Elimina el usuario
+        
+        Nota: Usa try/except para que si las tablas no existen,
+        la eliminación continúe sin errores.
+        """
         try:
             # Intentar eliminar movimientos de stock relacionados
+            # MovimientoStock puede tener ForeignKey a User
             from apps.inventory.models import MovimientoStock
             MovimientoStock.objects.filter(usuario=instance).update(usuario=None)
         except Exception:
             # Si la tabla no existe o hay error, continuar
+            # Esto permite que el sistema funcione aunque inventory no esté migrado
             pass
         
         try:
-            # Intentar eliminar solicitudes relacionadas
+            # Intentar eliminar solicitudes de repuestos relacionadas
+            # SolicitudRepuesto puede tener ForeignKey a User en múltiples campos
             from apps.inventory.models import SolicitudRepuesto
             SolicitudRepuesto.objects.filter(
                 solicitante=instance
@@ -51,35 +108,98 @@ class UserViewSet(viewsets.ModelViewSet):
             pass
         
         # Eliminar el usuario
+        # Django automáticamente eliminará:
+        # - Profile (OneToOne con CASCADE)
+        # - PasswordResetToken (ForeignKey con CASCADE)
         instance.delete()
 
-    # Esta es la acción para /api/users/me/
     @action(detail=False, methods=['get', 'put', 'patch'], permission_classes=[permissions.IsAuthenticated])
     def me(self, request, *args, **kwargs):
+        """
+        Endpoint para obtener/editar el perfil del usuario logueado.
+        
+        URL: /api/v1/users/me/
+        
+        Métodos:
+        - GET: Retorna información del usuario actual
+        - PUT/PATCH: Actualiza información del usuario actual
+        
+        Permisos:
+        - Requiere autenticación (cualquier usuario logueado)
+        
+        Funcionamiento:
+        - Establece self.kwargs['pk'] = request.user.pk
+        - Delega a retrieve() o update() según el método
+        - Esto permite reutilizar la lógica de esos métodos
+        
+        Uso:
+        - Frontend llama a /api/v1/users/me/ para obtener datos del usuario
+        - Frontend llama a PUT /api/v1/users/me/ para actualizar perfil
+        """
+        # Establecer el ID del usuario actual como el ID a consultar
+        # Esto permite usar los métodos retrieve() y update() existentes
         self.kwargs['pk'] = request.user.pk
+        
         if request.method == 'GET':
+            # Obtener información del usuario
             return self.retrieve(request, *args, **kwargs)
         elif request.method in ['PUT', 'PATCH']:
+            # Actualizar información del usuario
             return self.update(request, *args, **kwargs)
 
 class ProfileViewSet(viewsets.ModelViewSet):
     """
-    ViewSet para perfiles. Generalmente se accede a través del endpoint /me/.
+    ViewSet para perfiles de usuario.
+    
+    Generalmente se accede a través del endpoint /users/me/,
+    pero este ViewSet permite gestión directa de perfiles si es necesario.
+    
+    Permisos:
+    - Requiere autenticación
+    - Usuario solo ve su propio perfil (a menos que sea staff/admin)
+    
+    Relaciones:
+    - OneToOne con User (a través de AUTH_USER_MODEL)
     """
     queryset = Profile.objects.all()
     serializer_class = ProfileSerializer
-    permission_classes = [permissions.IsAuthenticated] # Añade permisos más granulares si es necesario
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        # Un usuario solo debería ver su propio perfil, a menos que sea admin
+        """
+        Filtrar queryset según permisos.
+        
+        - Staff/Admin: Ven todos los perfiles
+        - Usuario regular: Solo ve su propio perfil
+        
+        Retorna:
+        - QuerySet filtrado según el usuario
+        """
         if self.request.user.is_staff:
             return Profile.objects.all()
         return Profile.objects.filter(user=self.request.user)
     
 class MeAPIView(APIView):
+    """
+    Vista alternativa para /me/.
+    
+    Endpoint simple que retorna información del usuario actual.
+    Más simple que usar UserViewSet.me, pero con menos funcionalidades.
+    
+    URL: /api/v1/users/me/ (si está configurado en urls.py)
+    
+    Permisos:
+    - Requiere autenticación
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        """
+        Retorna información del usuario actual.
+        
+        Retorna:
+        - JSON con datos del usuario serializados
+        """
         return Response(UserSerializer(request.user).data)
     
 
@@ -93,17 +213,65 @@ from .serializers import LoginSerializer, UserSerializer, ProfileSerializer, Usu
 
 
 class LoginView(APIView):
-    permission_classes = [AllowAny]
+    """
+    Vista de autenticación (login).
+    
+    Endpoint: POST /api/v1/auth/login/
+    
+    Permisos:
+    - Público (AllowAny) - cualquiera puede intentar hacer login
+    
+    Funcionalidad:
+    1. Valida credenciales (username/password)
+    2. Verifica que el usuario esté activo
+    3. Genera tokens JWT (access y refresh)
+    4. Establece cookies con los tokens
+    5. Registra auditoría de login exitoso
+    6. Retorna información del usuario y tokens
+    
+    Cookies:
+    - pgf_access: Token de acceso (expira en 1 hora)
+    - pgf_refresh: Token de refresh (expira en 7 días)
+    
+    Relaciones:
+    - Usa LoginSerializer para validar credenciales
+    - Usa apps/workorders/models.py (Auditoria) para logs
+    """
+    permission_classes = [AllowAny]  # Público - cualquiera puede intentar login
 
     def post(self, request):
-        serializer = LoginSerializer(data=request.data)
+        """
+        Procesa el login.
+        
+        Parámetros (body JSON):
+        - username: Nombre de usuario
+        - password: Contraseña
+        
+        Retorna:
+        - 200: Login exitoso
+          {
+            "user": {...},
+            "access": "token...",
+            "refresh": "token..."
+          }
+        - 400: Credenciales inválidas o usuario inactivo
+        - 401: Error de autenticación
+        """
+        # Validar datos de entrada
+        serializer = LoginSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
+        
+        # Obtener usuario validado del serializer
+        # LoginSerializer.validate() ya verificó credenciales y que esté activo
         user = serializer.validated_data["user"]
 
+        # Generar tokens JWT
+        # RefreshToken.for_user() crea un par de tokens (refresh + access)
         refresh = RefreshToken.for_user(user)
-        access = refresh.access_token
+        access = refresh.access_token  # Token de acceso (corto plazo)
 
         # Registrar auditoría de acceso exitoso
+        # Esto permite rastrear quién y cuándo accedió al sistema
         from apps.workorders.models import Auditoria
         from django.utils import timezone
         Auditoria.objects.create(
@@ -112,31 +280,35 @@ class LoginView(APIView):
             objeto_tipo="User",
             objeto_id=str(user.id),
             payload={
-                "ip": self.get_client_ip(request),
-                "user_agent": request.META.get('HTTP_USER_AGENT', ''),
-                "timestamp": timezone.now().isoformat()
+                "ip": self.get_client_ip(request),  # IP del cliente
+                "user_agent": request.META.get('HTTP_USER_AGENT', ''),  # Navegador
+                "timestamp": timezone.now().isoformat()  # Fecha/hora
             }
         )
 
+        # Preparar respuesta con datos del usuario y tokens
         res = Response({
-            "user": UserSerializer(user).data,
-            "access": str(access),
-            "refresh": str(refresh),
+            "user": UserSerializer(user).data,  # Datos del usuario serializados
+            "access": str(access),              # Token de acceso (también en cookie)
+            "refresh": str(refresh),            # Token de refresh (también en cookie)
         })
 
-        # 🟩 Cookies correctas para LOCAL y PROD
-        secure = not settings.DEBUG  # secure=True solo en producción
+        # Configurar cookies con los tokens
+        # secure: True solo en producción (HTTPS), False en desarrollo (HTTP)
+        secure = not settings.DEBUG
 
+        # Cookie con token de acceso
         res.set_cookie(
             "pgf_access",
             str(access),
-            httponly=True,
-            samesite="Lax",
-            secure=secure,
-            path="/",
-            max_age=3600,
+            httponly=True,      # No accesible desde JavaScript (protección XSS)
+            samesite="Lax",     # Protección CSRF
+            secure=secure,      # Solo enviar por HTTPS en producción
+            path="/",           # Disponible en todo el sitio
+            max_age=3600,       # Expira en 1 hora (3600 segundos)
         )
 
+        # Cookie con token de refresh
         res.set_cookie(
             "pgf_refresh",
             str(refresh),
@@ -144,38 +316,90 @@ class LoginView(APIView):
             samesite="Lax",
             secure=secure,
             path="/",
-            max_age=3600 * 24 * 7,
+            max_age=3600 * 24 * 7,  # Expira en 7 días
         )
 
         return res
     
     def get_client_ip(self, request):
-        """Obtiene la IP del cliente"""
+        """
+        Obtiene la IP real del cliente.
+        
+        Considera proxies y load balancers que pueden agregar
+        headers como X-Forwarded-For.
+        
+        Parámetros:
+        - request: Objeto HttpRequest de Django
+        
+        Retorna:
+        - str: IP del cliente
+        
+        Uso:
+        - Llamado desde post() para registrar en auditoría
+        """
+        # Verificar header X-Forwarded-For (usado por proxies)
         x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
         if x_forwarded_for:
+            # X-Forwarded-For puede tener múltiples IPs separadas por coma
+            # La primera es la IP original del cliente
             ip = x_forwarded_for.split(',')[0]
         else:
+            # Si no hay X-Forwarded-For, usar REMOTE_ADDR
             ip = request.META.get('REMOTE_ADDR')
         return ip
 
 
 class RefreshCookieView(APIView):
+    """
+    Vista para renovar el token de acceso usando el refresh token.
+    
+    Endpoint: POST /api/v1/auth/refresh/
+    
+    Permisos:
+    - Público (AllowAny) - pero requiere refresh token válido en cookie
+    
+    Funcionalidad:
+    1. Lee el refresh token de las cookies
+    2. Valida el token
+    3. Genera un nuevo access token
+    4. Establece cookie con el nuevo access token
+    5. Retorna el nuevo access token
+    
+    Uso:
+    - Llamado automáticamente cuando el access token expira
+    - Permite mantener la sesión activa sin requerir login nuevamente
+    """
     permission_classes = [AllowAny]
 
     def post(self, request):
+        """
+        Renueva el token de acceso.
+        
+        Retorna:
+        - 200: Token renovado
+          {
+            "access": "nuevo_token..."
+          }
+        - 401: Refresh token inválido o no encontrado
+        """
+        # Obtener refresh token de las cookies
         refresh_token = request.COOKIES.get("pgf_refresh")
 
         if not refresh_token:
             return Response({"detail": "No refresh token found"}, status=401)
 
         try:
+            # Validar y generar nuevo access token
             refresh = RefreshToken(refresh_token)
-            access = refresh.access_token
+            access = refresh.access_token  # Nuevo token de acceso
         except Exception:
+            # Si el token es inválido o expiró
             return Response({"detail": "Invalid refresh token"}, status=401)
 
+        # Preparar respuesta con nuevo token
         res = Response({"access": str(access)})
 
+        # Configurar cookie con nuevo access token
         secure = not settings.DEBUG
 
         res.set_cookie(
@@ -185,7 +409,7 @@ class RefreshCookieView(APIView):
             samesite="Lax",
             secure=secure,
             path="/",
-            max_age=3600,
+            max_age=3600,  # 1 hora
         )
 
         return res
@@ -193,33 +417,86 @@ class RefreshCookieView(APIView):
 
 
 class UsuarioListViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet de solo lectura para listar usuarios.
+    
+    Útil cuando solo se necesita listar usuarios sin permitir
+    crear, editar o eliminar.
+    
+    Endpoints:
+    - GET /api/v1/users/ → Lista usuarios (serializer simplificado)
+    - GET /api/v1/users/{id}/ → Ver usuario
+    
+    Permisos:
+    - Requiere autenticación
+    """
     queryset = User.objects.all().order_by('id')
-    serializer_class = UsuarioListSerializer
+    serializer_class = UsuarioListSerializer  # Serializer simplificado (menos campos)
     permission_classes = [permissions.IsAuthenticated]
 
 
 class PasswordResetRequestView(APIView):
-    """Solicita recuperación de contraseña"""
+    """
+    Vista para solicitar recuperación de contraseña.
+    
+    Endpoint: POST /api/v1/auth/password-reset/
+    
+    Permisos:
+    - Público (AllowAny) - cualquiera puede solicitar reset
+    
+    Funcionalidad:
+    1. Valida que el email existe y el usuario está activo
+    2. Genera un token de reset único
+    3. Envía email con link de recuperación
+    4. Retorna éxito (sin exponer si el email existe o no)
+    
+    Seguridad:
+    - Siempre retorna 200 para no revelar si un email existe
+    - Token expira en 24 horas
+    - Solo un token activo por usuario (invalida anteriores)
+    
+    Relaciones:
+    - Usa PasswordResetToken.generate_token() para crear token
+    - Envía email usando Django send_mail
+    """
     permission_classes = [AllowAny]
     
     def post(self, request):
+        """
+        Procesa la solicitud de reset de contraseña.
+        
+        Parámetros (body JSON):
+        - email: Email del usuario
+        
+        Retorna:
+        - 200: Siempre (por seguridad, no revela si el email existe)
+        - 400: Error de validación (email inválido)
+        """
         from .serializers import PasswordResetRequestSerializer
         from .models import PasswordResetToken
         from django.core.mail import send_mail
         from django.conf import settings
         
+        # Validar email
         serializer = PasswordResetRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         email = serializer.validated_data['email']
         
         try:
+            # Buscar usuario activo con ese email
             user = User.objects.get(email=email, is_active=True)
+            
+            # Generar token de reset
+            # Esto invalida automáticamente tokens anteriores
             reset_token = PasswordResetToken.generate_token(user)
             
-            # Enviar email con el token
-            reset_url = f"{settings.FRONTEND_URL or 'http://localhost:3000'}/auth/reset-password?token={reset_token.token}"
+            # Construir URL de reset
+            # El frontend debe tener una página en /auth/reset-password
+            frontend_url = settings.FRONTEND_URL or 'http://localhost:3000'
+            reset_url = f"{frontend_url}/auth/reset-password?token={reset_token.token}"
             
             try:
+                # Enviar email con el link de reset
                 from django.core.mail import send_mail
                 from django.template.loader import render_to_string
                 from django.utils.html import strip_tags
@@ -250,60 +527,73 @@ class PasswordResetRequestView(APIView):
                 </html>
                 """
                 
-                plain_message = strip_tags(html_message)
-                
+                # Enviar email
                 send_mail(
-                    subject='Recuperación de Contraseña - PGF',
-                    message=plain_message,
+                    subject="Recuperación de Contraseña - PGF",
+                    message=strip_tags(html_message),  # Versión texto plano
                     from_email=settings.DEFAULT_FROM_EMAIL,
                     recipient_list=[email],
-                    html_message=html_message,
+                    html_message=html_message,  # Versión HTML
                     fail_silently=False,
                 )
             except Exception as e:
-                # Si falla el envío de email, registrar error pero no fallar la solicitud
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.error(f"Error enviando email de recuperación de contraseña: {e}")
-                # En desarrollo, retornar el token en la respuesta
-                if settings.DEBUG:
-                    return Response({
-                        "message": "Si el email existe, se ha enviado un enlace de recuperación.",
-                        "token": reset_token.token,  # Solo en desarrollo
-                        "error": str(e)
-                    })
-            
-            # Registrar auditoría
-            from apps.workorders.models import Auditoria
-            Auditoria.objects.create(
-                usuario=user,
-                accion="SOLICITAR_RESET_PASSWORD",
-                objeto_tipo="PasswordResetToken",
-                objeto_id=str(reset_token.id),
-                payload={"email": email}
-            )
-            
-            return Response({
-                "message": "Si el email existe, se ha enviado un enlace de recuperación.",
-                # En desarrollo, retornar el token (eliminar en producción)
-                "token": reset_token.token if settings.DEBUG else None
-            })
+                # Si falla el envío de email, registrar error pero no fallar la request
+                # Esto evita revelar si el email existe
+                print(f"Error enviando email de reset: {e}")
+        
         except User.DoesNotExist:
-            # Por seguridad, no revelamos si el email existe o no
-            return Response({
-                "message": "Si el email existe, se ha enviado un enlace de recuperación."
-            })
+            # Usuario no encontrado o inactivo
+            # No revelar esto por seguridad (timing attack prevention)
+            pass
+        
+        # Siempre retornar éxito (por seguridad)
+        # No revelar si el email existe o no en el sistema
+        return Response({
+            "message": "Si el email existe, se envió un enlace de recuperación."
+        }, status=200)
 
 
 class PasswordResetConfirmView(APIView):
-    """Confirma y cambia la contraseña con el token"""
+    """
+    Vista para confirmar y cambiar la contraseña con token.
+    
+    Endpoint: POST /api/v1/auth/password-reset/confirm/
+    
+    Permisos:
+    - Público (AllowAny) - pero requiere token válido
+    
+    Funcionalidad:
+    1. Valida el token de reset
+    2. Verifica que el token no haya expirado ni sido usado
+    3. Valida la nueva contraseña
+    4. Cambia la contraseña del usuario
+    5. Marca el token como usado
+    6. Retorna éxito
+    
+    Relaciones:
+    - Usa PasswordResetToken para validar token
+    - Usa User.set_password() para cambiar contraseña
+    """
     permission_classes = [AllowAny]
     
     def post(self, request):
+        """
+        Confirma el reset de contraseña.
+        
+        Parámetros (body JSON):
+        - token: Token de reset obtenido del email
+        - new_password: Nueva contraseña
+        - confirm_password: Confirmación de nueva contraseña
+        
+        Retorna:
+        - 200: Contraseña cambiada exitosamente
+        - 400: Token inválido, expirado, o contraseñas no coinciden
+        """
         from .serializers import PasswordResetConfirmSerializer
         from .models import PasswordResetToken
         from django.utils import timezone
         
+        # Validar datos
         serializer = PasswordResetConfirmSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
@@ -311,8 +601,13 @@ class PasswordResetConfirmView(APIView):
         new_password = serializer.validated_data['new_password']
         
         try:
-            reset_token = PasswordResetToken.objects.get(token=token_str, used=False)
+            # Buscar token
+            reset_token = PasswordResetToken.objects.get(
+                token=token_str,
+                used=False
+            )
             
+            # Verificar que no haya expirado
             if not reset_token.is_valid():
                 return Response(
                     {"detail": "El token ha expirado o ya fue usado."},
@@ -321,7 +616,7 @@ class PasswordResetConfirmView(APIView):
             
             # Cambiar contraseña
             user = reset_token.user
-            user.set_password(new_password)
+            user.set_password(new_password)  # Hashea la contraseña automáticamente
             user.save()
             
             # Marcar token como usado
@@ -332,13 +627,14 @@ class PasswordResetConfirmView(APIView):
             from apps.workorders.models import Auditoria
             Auditoria.objects.create(
                 usuario=user,
-                accion="RESET_PASSWORD_COMPLETADO",
-                objeto_tipo="PasswordResetToken",
-                objeto_id=str(reset_token.id),
+                accion="PASSWORD_RESET",
+                objeto_tipo="User",
+                objeto_id=str(user.id),
                 payload={}
             )
             
             return Response({"message": "Contraseña actualizada correctamente."})
+        
         except PasswordResetToken.DoesNotExist:
             return Response(
                 {"detail": "Token inválido."},
@@ -347,14 +643,45 @@ class PasswordResetConfirmView(APIView):
 
 
 class ChangePasswordView(APIView):
-    """Permite a un usuario cambiar su propia contraseña"""
+    """
+    Vista para que un usuario cambie su propia contraseña.
+    
+    Endpoint: POST /api/v1/auth/change-password/
+    
+    Permisos:
+    - Requiere autenticación (IsAuthenticated)
+    
+    Funcionalidad:
+    1. Verifica la contraseña actual
+    2. Valida la nueva contraseña
+    3. Cambia la contraseña
+    4. Actualiza la sesión para evitar logout
+    5. Registra auditoría
+    
+    Uso:
+    - Llamado desde /profile/change-password en el frontend
+    - Permite a usuarios cambiar su contraseña sin recuperación
+    """
     permission_classes = [IsAuthenticated]
     
     def post(self, request):
+        """
+        Cambia la contraseña del usuario logueado.
+        
+        Parámetros (body JSON):
+        - current_password: Contraseña actual (para verificar)
+        - new_password: Nueva contraseña
+        - confirm_password: Confirmación de nueva contraseña
+        
+        Retorna:
+        - 200: Contraseña cambiada exitosamente
+        - 400: Contraseña actual incorrecta o validación falla
+        """
         from .serializers import ChangePasswordSerializer
         from django.contrib.auth import update_session_auth_hash
         from rest_framework import status
         
+        # Validar datos
         serializer = ChangePasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
@@ -372,6 +699,7 @@ class ChangePasswordView(APIView):
         user.save()
         
         # Actualizar sesión para evitar logout
+        # Esto mantiene al usuario autenticado después del cambio
         update_session_auth_hash(request, user)
         
         # Registrar auditoría
@@ -388,10 +716,45 @@ class ChangePasswordView(APIView):
 
 
 class AdminChangePasswordView(APIView):
-    """Permite a un admin cambiar la contraseña de otro usuario"""
+    """
+    Vista para que un admin cambie la contraseña de otro usuario.
+    
+    Endpoint: POST /api/v1/users/{user_id}/change-password/
+    
+    Permisos:
+    - Requiere autenticación
+    - Solo ADMIN o SUPERVISOR pueden cambiar contraseñas de otros
+    
+    Funcionalidad:
+    1. Verifica que el usuario sea ADMIN o SUPERVISOR
+    2. Busca el usuario objetivo
+    3. Valida la nueva contraseña
+    4. Cambia la contraseña
+    5. Registra auditoría
+    
+    Uso:
+    - Llamado desde /users/{id}/change-password en el frontend
+    - Permite a admins resetear contraseñas sin conocer la actual
+    """
     permission_classes = [IsAuthenticated]
     
     def post(self, request, user_id=None):
+        """
+        Cambia la contraseña de otro usuario.
+        
+        Parámetros:
+        - user_id: ID del usuario cuya contraseña se cambiará (path parameter)
+        
+        Body JSON:
+        - new_password: Nueva contraseña
+        - confirm_password: Confirmación de nueva contraseña
+        
+        Retorna:
+        - 200: Contraseña cambiada exitosamente
+        - 403: Usuario no tiene permisos
+        - 404: Usuario objetivo no encontrado
+        - 400: Error de validación
+        """
         from .serializers import AdminChangePasswordSerializer
         from rest_framework import status
         
@@ -402,10 +765,12 @@ class AdminChangePasswordView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         
+        # Validar datos
         serializer = AdminChangePasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
         try:
+            # Buscar usuario objetivo
             target_user = User.objects.get(id=user_id)
         except User.DoesNotExist:
             return Response(
@@ -420,11 +785,11 @@ class AdminChangePasswordView(APIView):
         # Registrar auditoría
         from apps.workorders.models import Auditoria
         Auditoria.objects.create(
-            usuario=request.user,
+            usuario=request.user,  # Quien hizo el cambio
             accion="ADMIN_CAMBIAR_PASSWORD",
             objeto_tipo="User",
             objeto_id=str(target_user.id),
-            payload={"target_user": target_user.username}
+            payload={"target_user": target_user.username}  # Usuario afectado
         )
         
         return Response({"message": f"Contraseña de {target_user.username} actualizada correctamente."})
