@@ -1,0 +1,49 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2025-10-14T00:00:00.000Z",
+  "__export_source": "pgf-insomnia",
+  "resources": [
+    { "_id": "wrk_pgf", "_type": "workspace", "name": "PGF API (Django + DRF)", "scope": "collection" },
+    { "_id": "env_base", "_type": "environment", "parentId": "wrk_pgf", "name": "Base Env",
+      "data": { "baseUrl": "http://localhost:8000", "username": "admin", "password": "admin123", "token": "", "ot_id": "", "user_id": "" } },
+    { "_id": "req_login", "_type": "request", "parentId": "wrk_pgf", "name": "Auth - Obtener token",
+      "method": "POST", "url": "{{ baseUrl }}/api/auth/token/",
+      "body": { "mimeType": "application/json", "text": "{\"username\":\"{{ username }}\",\"password\":\"{{ password }}\"}" },
+      "headers": [ { "name": "Content-Type", "value": "application/json" } ] },
+
+    { "_id": "req_list_veh", "_type": "request", "parentId": "wrk_pgf", "name": "Vehiculos - Listar",
+      "method": "GET", "url": "{{ baseUrl }}/api/vehiculos/",
+      "headers": [ { "name": "Authorization", "value": "Bearer {{ token }}" } ] },
+
+    { "_id": "req_list_ot", "_type": "request", "parentId": "wrk_pgf", "name": "OT - Listar",
+      "method": "GET", "url": "{{ baseUrl }}/api/work/ordenes/",
+      "headers": [ { "name": "Authorization", "value": "Bearer {{ token }}" } ] },
+
+    { "_id": "req_ot_asignar", "_type": "request", "parentId": "wrk_pgf", "name": "OT - Asignar responsable",
+      "method": "POST", "url": "{{ baseUrl }}/api/work/ordenes/{{ ot_id }}/asignar/",
+      "body": { "mimeType": "application/json", "text": "{\"responsable_id\":\"{{ user_id }}\"}" },
+      "headers": [ { "name": "Authorization", "value": "Bearer {{ token }}" }, { "name": "Content-Type", "value": "application/json" } ] },
+
+    { "_id": "req_ot_en_ejec", "_type": "request", "parentId": "wrk_pgf", "name": "OT - En Ejecución",
+      "method": "POST", "url": "{{ baseUrl }}/api/work/ordenes/{{ ot_id }}/en-ejecucion/",
+      "headers": [ { "name": "Authorization", "value": "Bearer {{ token }}" } ] },
+
+    { "_id": "req_ot_en_qa", "_type": "request", "parentId": "wrk_pgf", "name": "OT - En QA",
+      "method": "POST", "url": "{{ baseUrl }}/api/work/ordenes/{{ ot_id }}/en-qa/",
+      "headers": [ { "name": "Authorization", "value": "Bearer {{ token }}" } ] },
+
+    { "_id": "req_ot_cerrar", "_type": "request", "parentId": "wrk_pgf", "name": "OT - Cerrar",
+      "method": "POST", "url": "{{ baseUrl }}/api/work/ordenes/{{ ot_id }}/cerrar/",
+      "headers": [ { "name": "Authorization", "value": "Bearer {{ token }}" } ] },
+
+    { "_id": "req_ot_anular", "_type": "request", "parentId": "wrk_pgf", "name": "OT - Anular",
+      "method": "POST", "url": "{{ baseUrl }}/api/work/ordenes/{{ ot_id }}/anular/",
+      "headers": [ { "name": "Authorization", "value": "Bearer {{ token }}" } ] },
+
+    { "_id": "req_pausa_create", "_type": "request", "parentId": "wrk_pgf", "name": "Pausa - Crear",
+      "method": "POST", "url": "{{ baseUrl }}/api/work/pausas/",
+      "body": { "mimeType": "application/json", "text": "{\"ot\":\"{{ ot_id }}\",\"usuario\":\"{{ user_id }}\",\"motivo\":\"esperando piezas\"}" },
+      "headers": [ { "name": "Authorization", "value": "Bearer {{ token }}" }, { "name": "Content-Type", "value": "application/json" } ] }
+  ]
+}

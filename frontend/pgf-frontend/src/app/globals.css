@@ -1,0 +1,382 @@
+/* ============================================================
+   🔷 SISTEMA GLOBAL DE DISEÑO (Design Tokens)
+   ============================================================ */
+
+@import "tailwindcss";
+
+:root {
+  --font-main: 'Inter', system-ui, sans-serif;
+
+  /* Colores principales */
+  --color-bg: #f5f6f8;
+  --color-text: #1f2937;
+  --color-card: #ffffff;
+
+  --color-primary: #2563eb;
+  --color-primary-hover: #1e4dcc;
+
+  --color-danger: #dc2626;
+  --color-danger-hover: #b91c1c;
+
+  --color-border: #e5e7eb;
+
+  /* Radios y sombras */
+  --radius: 8px;
+  --shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+
+/* Dark Mode automático */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0f0f0f;
+    --color-text: #f3f4f6;
+    --color-card: #1a1a1a;
+    --color-border: #3f3f3f;
+    --shadow: 0 2px 8px rgba(255,255,255,0.06);
+  }
+}
+
+/* ============================================================
+   🔷 RESETEO BASE + TIPOGRAFÍA
+   ============================================================ */
+
+html, body {
+  @apply m-0 p-0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-main);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Contenedor universal para páginas */
+.page {
+  @apply max-w-6xl mx-auto p-6;
+}
+
+
+/* ============================================================
+   🔷 CARDS PROFESIONALES
+   ============================================================ */
+
+.card {
+  background: var(--color-card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--color-border);
+  @apply p-6;
+}
+
+/* ============================================================
+   🔷 TÍTULOS Y TEXTO
+   ============================================================ */
+
+.h1 { @apply text-3xl font-bold mb-4; }
+.h2 { @apply text-2xl font-semibold mb-3; }
+.h3 { @apply text-xl font-semibold mb-2; }
+
+.text-muted { @apply text-gray-500; }
+
+/* ============================================================
+   🔷 TABLAS PROFESIONALES
+   ============================================================ */
+
+.table {
+  @apply w-full border-collapse bg-white shadow rounded-lg overflow-hidden;
+}
+
+.table thead {
+  @apply bg-gray-100 text-left;
+}
+
+.table th {
+  @apply p-3 text-sm font-semibold border-b border-gray-200;
+}
+
+.table td {
+  @apply p-3 text-sm border-b border-gray-100;
+}
+
+.table-row {
+  @apply hover:bg-gray-50 transition cursor-pointer;
+}
+
+/* ============================================================
+   🔷 BOTONES MODERNOS
+   ============================================================ */
+
+.btn {
+  @apply px-4 py-2 rounded-md font-semibold transition-all border border-transparent;
+  border-radius: var(--radius);
+}
+
+/* PRINCIPAL */
+.btn-primary {
+  background: var(--color-primary);
+  color: white;
+}
+.btn-primary:hover {
+  background: var(--color-primary-hover);
+}
+
+/* SECUNDARIO */
+.btn-secondary {
+  @apply bg-gray-200 hover:bg-gray-300 text-gray-800;
+}
+
+/* PELIGRO */
+.btn-danger {
+  background: var(--color-danger);
+  color: white;
+}
+.btn-danger:hover {
+  background: var(--color-danger-hover);
+}
+
+/* DESHABILITADO */
+.btn-disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+/* Para íconos */
+.btn-icon {
+  @apply p-2 rounded-full hover:bg-gray-200;
+}
+
+/* ============================================================
+   🔷 INPUTS + FORMULARIOS
+   ============================================================ */
+
+.input {
+  @apply w-full px-3 py-2 border bg-white rounded-md;
+  border-color: var(--color-border);
+  transition: all 0.2s;
+}
+
+.input:focus {
+  @apply outline-none ring-2 ring-blue-500;
+}
+
+.label {
+  @apply text-sm font-semibold mb-1 block;
+}
+
+textarea.input {
+  @apply min-h-[120px];
+}
+
+/* Select */
+select.input {
+  @apply appearance-none bg-white;
+}
+
+/* ============================================================
+   🔷 SECCIONES Y LAYOUT
+   ============================================================ */
+
+.section {
+  @apply bg-white shadow rounded-lg p-6 mb-6;
+}
+
+/* Contenedor centrado */
+.center {
+  @apply flex justify-center items-center;
+}
+
+/* Grid adaptable */
+.grid-auto {
+  @apply grid gap-6;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+
+/* ============================================================
+   🔷 SCROLLBAR MODERNO
+   ============================================================ */
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #e5e7eb;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #9ca3af;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
+/* ============================================================
+   🔷 UTILIDADES PERSONALIZADAS
+   ============================================================ */
+
+/* Espaciado entre secciones */
+.space-section {
+  @apply space-y-6;
+}
+
+/* Línea divisoria */
+.divider {
+  @apply border-t border-gray-300 my-6;
+}
+
+
+/* ------------------------------
+   GLOBAL GENERAL
+------------------------------ */
+body {
+  background: #f6f7fb;
+  font-family: "Inter", sans-serif;
+  color: #1f2937;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+th {
+  font-weight: 600;
+  color: #374151;
+}
+
+td, th {
+  padding: 0.75rem;
+}
+
+.shadow {
+  box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+}
+
+/* ------------------------------
+   ANIMACIONES SUAVES
+------------------------------ */
+.card-animated {
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+
+.card-animated:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 22px rgba(0,0,0,0.12);
+}
+
+/* ------------------------------
+   BOTONES
+------------------------------ */
+
+.btn-primary {
+  background: #2563eb;
+  color: white;
+  padding: 0.55rem 1.2rem;
+  border-radius: 8px;
+  transition: background .2s;
+}
+
+.btn-primary:hover {
+  background: #1e40af;
+}
+
+/* Filtros de OT */
+.filter-btn {
+  padding: 0.55rem 1.2rem;
+  border-radius: 8px;
+  background: #e5e7eb;
+  transition: .2s;
+}
+
+.filter-btn.active {
+  background: #2563eb;
+  color: white;
+}
+
+.filter-btn:hover {
+  background: #d1d5db;
+}
+
+/* Links */
+.action-link {
+  color: #2563eb;
+  transition: .2s;
+}
+
+.action-link:hover {
+  text-decoration: underline;
+}
+
+/* Tabla */
+tbody tr:hover {
+  background: #f9fafb;
+}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* --------------------------
+   GENERAL
+--------------------------- */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: "Inter", sans-serif;
+}
+
+/* --------------------------
+   DARK MODE OVERRIDES
+--------------------------- */
+.dark table {
+  color: #e5e7eb;
+}
+
+.dark th {
+  color: #d1d5db;
+}
+
+.dark td {
+  color: #e5e7eb;
+}
+
+.dark .shadow {
+  box-shadow: 0 4px 20px rgba(255, 255, 255, 0.08);
+}
+
+/* --------------------------
+   ANIMACIONES PRO
+--------------------------- */
+.card-animated {
+  transition: transform .15s ease, box-shadow .2s ease;
+}
+
+.card-animated:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+}
+
+.dark .card-animated:hover {
+  box-shadow: 0 8px 24px rgba(255,255,255,0.08);
+}
+
+/* --------------------------
+   BOTONES PRO
+--------------------------- */
+.btn-primary {
+  @apply bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 transition;
+}
+
+.action-link {
+  @apply text-blue-600 dark:text-blue-400 hover:underline transition;
+}
+
+/* --------------------------
+   FILTROS
+--------------------------- */
+.filter-btn {
+  @apply px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 transition;
+}
+
+.filter-btn.active {
+  @apply bg-blue-600 text-white;
+}
