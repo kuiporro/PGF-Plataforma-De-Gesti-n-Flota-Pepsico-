@@ -158,7 +158,3 @@ AWS_S3_ENDPOINT_URL = os.getenv("AWS_S3_ENDPOINT_URL", "http://localstack:4566")
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "test")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "test")
 AWS_PUBLIC_URL_PREFIX = os.getenv("AWS_PUBLIC_URL_PREFIX", "http://localhost:4566")
-
-DJANGO_DEBUG=True
-if os.getenv("DJANGO_DEBUG", "True") == "False":
-    DJANGO_DEBUG=False

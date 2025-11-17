@@ -23,7 +23,7 @@ from drf_spectacular.utils import extend_schema
 from apps.core.serializers import EmptySerializer
 from .filters import OrdenTrabajoFilter
 from .permissions import WorkOrderPermission
-from .services import transition as do_transition, transition
+from .services import transition, do_transition
 from .serializers import OrdenTrabajoListSerializer
 
 from .models import (
