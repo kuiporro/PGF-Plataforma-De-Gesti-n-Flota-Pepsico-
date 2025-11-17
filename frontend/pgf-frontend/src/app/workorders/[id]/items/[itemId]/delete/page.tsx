@@ -1,42 +1,58 @@
 "use client";
 
-import { ENDPOINTS } from "@/lib/constants";
-import { withSession } from "@/lib/api.client";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/components/ToastContainer";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 export default function DeleteItem({ params }: any) {
-  const otId = params.id;
-  const itemId = params.itemId;
+  const { id, itemId } = params;
   const router = useRouter();
+  const toast = useToast();
+  const [showConfirm, setShowConfirm] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const remove = async () => {
-    await fetch(`${ENDPOINTS.WORK_ITEMS}${itemId}/`, {
-      method: "DELETE",
-      ...withSession(),
-    });
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/proxy/work/items/${itemId}/`, {
+        method: "DELETE",
+        credentials: "include",
+      });
 
-    router.push(`/workorders/${otId}/items`);
+      if (!r.ok) {
+        const text = await r.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { detail: text || "Error desconocido" };
+        }
+        toast.error(data.detail || "Error al eliminar el ítem");
+        return;
+      }
+
+      toast.success("Ítem eliminado correctamente");
+      router.push(`/workorders/${id}/items`);
+    } catch (error) {
+      console.error("Error:", error);
+      toast.error("Error al eliminar el ítem");
+    } finally {
+      setLoading(false);
+      setShowConfirm(false);
+    }
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-xl font-bold text-red-600">Eliminar Ítem</h1>
-
-      <p>¿Seguro que deseas eliminar este ítem?</p>
-
-      <button
-        onClick={remove}
-        className="px-4 py-2 bg-red-600 text-white rounded"
-      >
-        Sí, eliminar
-      </button>
-
-      <button
-        onClick={() => router.back()}
-        className="px-4 py-2 bg-gray-300 rounded"
-      >
-        Cancelar
-      </button>
-    </div>
+    <ConfirmDialog
+      isOpen={showConfirm}
+      title="Eliminar Ítem"
+      message="¿Estás seguro de que deseas eliminar este ítem? Esta acción no se puede deshacer."
+      confirmText={loading ? "Eliminando..." : "Sí, eliminar"}
+      cancelText="Cancelar"
+      onConfirm={remove}
+      onCancel={() => router.back()}
+      type="danger"
+    />
   );
 }

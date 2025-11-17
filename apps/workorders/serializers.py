@@ -29,6 +29,9 @@ class OrdenTrabajoSerializer(serializers.ModelSerializer):
     items_data = ItemOTCreateSerializer(many=True, write_only=True, required=False)
     vehiculo_patente = serializers.CharField(source="vehiculo.patente", read_only=True)
     responsable_nombre = serializers.CharField(source="responsable.get_full_name", read_only=True)
+    supervisor_nombre = serializers.CharField(source="supervisor.get_full_name", read_only=True)
+    jefe_taller_nombre = serializers.CharField(source="jefe_taller.get_full_name", read_only=True)
+    mecanico_nombre = serializers.CharField(source="mecanico.get_full_name", read_only=True)
     fecha_apertura = serializers.DateTimeField(source="apertura", read_only=True)
 
     class Meta:
@@ -67,6 +70,9 @@ class AprobacionSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 class PausaSerializer(serializers.ModelSerializer):
+    usuario_nombre = serializers.CharField(source="usuario.get_full_name", read_only=True)
+    duracion_minutos = serializers.IntegerField(read_only=True)
+    
     class Meta:
         model = Pausa
         fields = "__all__"
@@ -85,6 +91,8 @@ class EvidenciaSerializer(serializers.ModelSerializer):
 class OrdenTrabajoListSerializer(serializers.ModelSerializer):
     vehiculo_patente = serializers.CharField(source="vehiculo.patente", read_only=True)
     responsable_nombre = serializers.CharField(source="responsable.get_full_name", read_only=True)
+    supervisor_nombre = serializers.CharField(source="supervisor.get_full_name", read_only=True)
+    mecanico_nombre = serializers.CharField(source="mecanico.get_full_name", read_only=True)
     fecha_apertura = serializers.DateTimeField(source="apertura", read_only=True)
 
     class Meta:
@@ -94,5 +102,10 @@ class OrdenTrabajoListSerializer(serializers.ModelSerializer):
             "estado",
             "vehiculo_patente",
             "responsable_nombre",
+            "supervisor_nombre",
+            "mecanico_nombre",
+            "prioridad",
+            "tipo",
             "fecha_apertura",
+            "zona",
         ]

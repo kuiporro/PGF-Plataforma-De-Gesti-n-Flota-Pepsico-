@@ -1,42 +1,62 @@
 "use client";
 
-import { ENDPOINTS } from "@/lib/constants";
-import { withSession } from "@/lib/api.client";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { useRouter, useParams } from "next/navigation";
+import { useToast } from "@/components/ToastContainer";
+import ConfirmDialog from "@/components/ConfirmDialog";
+import RoleGuard from "@/components/RoleGuard";
 
-export default function DeleteUser({ params }: any) {
-  const id = params.id;
+export default function DeleteUser() {
+  const params = useParams();
+  const id = params?.id as string;
   const router = useRouter();
+  const toast = useToast();
+  const [showConfirm, setShowConfirm] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const remove = async () => {
-    await fetch(`${ENDPOINTS.USERS}${id}/`, {
-      method: "DELETE",
-      ...withSession(),
-    });
-    router.push("/users");
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/proxy/users/${id}/`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+
+      if (!r.ok) {
+        const text = await r.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { detail: text || "Error desconocido" };
+        }
+        toast.error(data.detail || "Error al eliminar el usuario");
+        return;
+      }
+
+      toast.success("Usuario eliminado correctamente");
+      router.push("/users");
+    } catch (error) {
+      console.error("Error:", error);
+      toast.error("Error al eliminar el usuario");
+    } finally {
+      setLoading(false);
+      setShowConfirm(false);
+    }
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold text-red-600">Eliminar Usuario</h1>
-
-      <p>¿Seguro que deseas eliminar este usuario?</p>
-
-      <div className="flex space-x-4 mt-4">
-        <button
-          onClick={remove}
-          className="px-4 py-2 bg-red-600 text-white rounded"
-        >
-          Sí, eliminar
-        </button>
-
-        <button
-          onClick={() => router.push("/users")}
-          className="px-4 py-2 bg-gray-300 rounded"
-        >
-          Cancelar
-        </button>
-      </div>
-    </div>
+    <RoleGuard allow={["ADMIN", "SUPERVISOR"]}>
+      <ConfirmDialog
+        isOpen={showConfirm}
+        title="Eliminar Usuario"
+        message="¿Estás seguro de que deseas eliminar este usuario? Esta acción no se puede deshacer."
+        confirmText={loading ? "Eliminando..." : "Sí, eliminar"}
+        cancelText="Cancelar"
+        onConfirm={remove}
+        onCancel={() => router.back()}
+        type="danger"
+      />
+    </RoleGuard>
   );
 }

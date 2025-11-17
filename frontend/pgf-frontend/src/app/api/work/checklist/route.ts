@@ -4,7 +4,7 @@ import { handleBackendResponse } from "../utils";
 export async function POST(req: NextRequest) {
   try {
     const backend = process.env.NEXT_PUBLIC_API_BASE_URL || "http://pgf-api:8000";
-    const token = req.cookies.get("pgf_token")?.value;
+    const token = req.cookies.get("pgf_access")?.value;
 
     const body = await req.json();
 

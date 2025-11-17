@@ -2,87 +2,261 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/components/ToastContainer";
+import { validateRequired, validateEmail, validateMinLength } from "@/lib/validations";
+import RoleGuard from "@/components/RoleGuard";
+import { ALL_ROLES } from "@/lib/constants";
 
 export default function CreateUser() {
   const router = useRouter();
+  const toast = useToast();
   const [form, setForm] = useState({
     first_name: "",
     last_name: "",
     email: "",
+    rut: "",
     password: "",
-    rol: "USER",
+    username: "",
+    rol: "MECANICO",
   });
-  const [error, setError] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
 
-  const submit = async (e: any) => {
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
+
+    const firstNameError = validateRequired(form.first_name, "Nombre");
+    if (firstNameError) newErrors.first_name = firstNameError;
+
+    const lastNameError = validateRequired(form.last_name, "Apellido");
+    if (lastNameError) newErrors.last_name = lastNameError;
+
+    const emailError = validateRequired(form.email, "Email") || validateEmail(form.email);
+    if (emailError) newErrors.email = emailError;
+
+    const rutError = validateRequired(form.rut, "RUT");
+    if (rutError) newErrors.rut = rutError;
+    else if (form.rut) {
+      const rutClean = form.rut.replace(/[.-]/g, "").toUpperCase();
+      // Acepta 7-9 dígitos seguidos de un dígito verificador (0-9 o K)
+      if (!/^\d{7,9}[0-9K]$/.test(rutClean)) {
+        newErrors.rut = "RUT inválido. Debe ser sin puntos ni guión (ej: 123456789 o 12345678K)";
+      }
+    }
+
+    const usernameError = validateRequired(form.username, "Usuario");
+    if (usernameError) newErrors.username = usernameError;
+
+    const passwordError = validateRequired(form.password, "Contraseña") || validateMinLength(form.password, 6, "Contraseña");
+    if (passwordError) newErrors.password = passwordError;
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
 
-    const r = await fetch("/api/proxy/users", {
-      method: "POST",
-      body: JSON.stringify(form),
-    });
-
-    if (!r.ok) {
-      setError("Error al crear usuario");
+    if (!validateForm()) {
+      toast.error("Por favor corrige los errores en el formulario");
       return;
     }
 
-    router.push("/users");
+    setLoading(true);
+
+    try {
+      const r = await fetch("/api/proxy/users/", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+
+      const text = await r.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { detail: text || "Error desconocido" };
+      }
+
+      if (!r.ok) {
+        toast.error(data.detail || "Error al crear usuario");
+        if (data.errors) {
+          setErrors(data.errors);
+        }
+        return;
+      }
+
+      toast.success("Usuario creado correctamente");
+      router.push("/users");
+    } catch (error) {
+      console.error("Error:", error);
+      toast.error("Error al crear usuario");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateField = (key: string, value: string) => {
+    setForm({ ...form, [key]: value });
+    if (errors[key]) {
+      setErrors({ ...errors, [key]: "" });
+    }
   };
 
   return (
-    <div className="page max-w-xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Crear Usuario</h1>
+    <RoleGuard allow={["ADMIN", "SUPERVISOR"]}>
+      <div className="p-6 max-w-2xl mx-auto">
+        <h1 className="text-3xl font-bold mb-6">Crear Usuario</h1>
 
-      {error && <div className="p-3 bg-red-100 text-red-700 mb-4">{error}</div>}
+        <form onSubmit={submit} className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-6">
+          <div>
+            <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+              Nombre *
+            </label>
+            <input
+              placeholder="Nombre"
+              className={`input w-full ${errors.first_name ? "border-red-500" : ""}`}
+              value={form.first_name}
+              onChange={(e) => updateField("first_name", e.target.value)}
+            />
+            {errors.first_name && (
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.first_name}</p>
+            )}
+          </div>
 
-      <form onSubmit={submit} className="space-y-4 bg-white p-6 rounded-lg shadow">
-        <input
-          placeholder="Nombre"
-          required
-          className="input"
-          value={form.first_name}
-          onChange={(e) => setForm({ ...form, first_name: e.target.value })}
-        />
+          <div>
+            <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+              Apellido *
+            </label>
+            <input
+              placeholder="Apellido"
+              className={`input w-full ${errors.last_name ? "border-red-500" : ""}`}
+              value={form.last_name}
+              onChange={(e) => updateField("last_name", e.target.value)}
+            />
+            {errors.last_name && (
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.last_name}</p>
+            )}
+          </div>
 
-        <input
-          placeholder="Apellido"
-          required
-          className="input"
-          value={form.last_name}
-          onChange={(e) => setForm({ ...form, last_name: e.target.value })}
-        />
+          <div>
+            <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+              Usuario *
+            </label>
+            <input
+              placeholder="Nombre de usuario"
+              className={`input w-full ${errors.username ? "border-red-500" : ""}`}
+              value={form.username}
+              onChange={(e) => updateField("username", e.target.value)}
+            />
+            {errors.username && (
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.username}</p>
+            )}
+          </div>
 
-        <input
-          type="email"
-          placeholder="Email"
-          required
-          className="input"
-          value={form.email}
-          onChange={(e) => setForm({ ...form, email: e.target.value })}
-        />
+          <div>
+            <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+              Email *
+            </label>
+            <input
+              type="email"
+              placeholder="email@ejemplo.com"
+              className={`input w-full ${errors.email ? "border-red-500" : ""}`}
+              value={form.email}
+              onChange={(e) => updateField("email", e.target.value)}
+            />
+            {errors.email && (
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.email}</p>
+            )}
+          </div>
 
-        <input
-          type="password"
-          placeholder="Contraseña"
-          required
-          className="input"
-          value={form.password}
-          onChange={(e) => setForm({ ...form, password: e.target.value })}
-        />
+          <div>
+            <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+              RUT *
+            </label>
+            <input
+              placeholder="123456789 (sin puntos ni guión)"
+              className={`input w-full ${errors.rut ? "border-red-500" : ""}`}
+              value={form.rut}
+              onChange={(e) => {
+                let value = e.target.value.replace(/[^0-9kK]/gi, "").toUpperCase();
+                // Limitar a 10 caracteres máximo (9 dígitos + 1 verificador)
+                if (value.length > 10) value = value.slice(0, 10);
+                updateField("rut", value);
+              }}
+              maxLength={12}
+            />
+            {errors.rut && (
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.rut}</p>
+            )}
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Sin puntos ni guión (ej: 123456789)
+            </p>
+          </div>
 
-        <select
-          className="input"
-          value={form.rol}
-          onChange={(e) => setForm({ ...form, rol: e.target.value })}
-        >
-          <option value="ADMIN">ADMIN</option>
-          <option value="USER">USER</option>
-        </select>
+          <div>
+            <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+              Contraseña *
+            </label>
+            <input
+              type="password"
+              placeholder="Mínimo 6 caracteres"
+              className={`input w-full ${errors.password ? "border-red-500" : ""}`}
+              value={form.password}
+              onChange={(e) => updateField("password", e.target.value)}
+            />
+            {errors.password && (
+              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.password}</p>
+            )}
+          </div>
 
-        <button className="btn-primary w-full">Crear</button>
-      </form>
-    </div>
+          <div>
+            <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+              Rol *
+            </label>
+            <select
+              className="input w-full"
+              value={form.rol}
+              onChange={(e) => updateField("rol", e.target.value)}
+            >
+              {ALL_ROLES.map((rol) => (
+                <option key={rol} value={rol}>
+                  {rol}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex gap-4 pt-4">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="flex-1 px-4 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? (
+                <span className="flex items-center justify-center">
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Creando...
+                </span>
+              ) : (
+                "Crear Usuario"
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </RoleGuard>
   );
 }

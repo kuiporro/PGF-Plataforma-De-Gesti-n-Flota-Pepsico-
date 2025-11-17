@@ -3,7 +3,7 @@ import { ENDPOINTS } from "@/lib/constants";
 
 export async function GET() {
   const cookieStore = await cookies();
-  const token = cookieStore.get("pgf_token")?.value;
+  const token = cookieStore.get("pgf_access")?.value;
 
   if (!token)
     return Response.json({ detail: "Unauthorized" }, { status: 401 });

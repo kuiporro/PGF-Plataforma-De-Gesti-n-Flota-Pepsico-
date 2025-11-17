@@ -1,12 +1,15 @@
+import { NextRequest } from "next/server";
 import { proxyFetch } from "../utils";
 
 export async function GET() {
   return proxyFetch("/users/");
 }
-export async function POST(request: Request) {
+
+export async function POST(request: NextRequest) {
+  const body = await request.json();
   return proxyFetch("/users/", {
     method: "POST",
-    body: request.body,
+    body: JSON.stringify(body),
   });
 }
 // import { NextResponse as Response } from "next/server";

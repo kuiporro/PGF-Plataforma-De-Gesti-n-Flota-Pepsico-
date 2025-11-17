@@ -26,11 +26,17 @@ INSTALLED_APPS = [
     "apps.users",
     "apps.vehicles",
     "apps.workorders",
+    "apps.inventory",
+    "apps.reports",
+    "apps.drivers",
+    "apps.scheduling",
+    "apps.emergencies",
 ]
 
 AUTH_USER_MODEL = "users.User"
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # "apps.workorders.middleware.RateLimitMiddleware",  # Descomentar cuando se necesite rate limiting
     "django.contrib.sessions.middleware.SessionMiddleware",         # ✔ requerido
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",                    # opcional pero recomendado
@@ -158,3 +164,39 @@ AWS_S3_ENDPOINT_URL = os.getenv("AWS_S3_ENDPOINT_URL", "http://localstack:4566")
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "test")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "test")
 AWS_PUBLIC_URL_PREFIX = os.getenv("AWS_PUBLIC_URL_PREFIX", "http://localhost:4566")
+
+# -------- EMAIL --------
+EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True") == "True"
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "kui.peer1402@gmail.com")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")  # Configurar en .env
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "kui.peer1402@gmail.com")
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
+
+# URL del frontend para enlaces de recuperación
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
+# -------- CACHING (Redis) --------
+# Nota: Requiere django-redis instalado
+try:
+    CACHES = {
+        "default": {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": os.getenv("REDIS_URL", "redis://redis:6379/2"),  # DB 2 para cache (0 y 1 son para Celery)
+            "OPTIONS": {
+                "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            },
+            "KEY_PREFIX": "pgf",
+            "TIMEOUT": 300,  # 5 minutos por defecto
+        }
+    }
+except ImportError:
+    # Fallback a cache en memoria si django-redis no está instalado
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "unique-snowflake",
+        }
+    }

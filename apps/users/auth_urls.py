@@ -39,8 +39,16 @@ class RefreshCookieView(APIView):
         return res
 
 
+from .views import (
+    PasswordResetRequestView, PasswordResetConfirmView,
+    ChangePasswordView, AdminChangePasswordView
+)
+
 urlpatterns = [
     path("login/", LoginView.as_view(), name="login"),
     path("refresh/", RefreshCookieView.as_view(), name="refresh"),
     path("me/", MeAPIView.as_view(), name="me"),
+    path("password-reset/", PasswordResetRequestView.as_view(), name="password-reset-request"),
+    path("password-reset/confirm/", PasswordResetConfirmView.as_view(), name="password-reset-confirm"),
+    path("change-password/", ChangePasswordView.as_view(), name="change-password"),
 ]

@@ -1,43 +1,58 @@
 "use client";
 
-import { ENDPOINTS } from "@/lib/constants";
-import { withSession } from "@/lib/api.client";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/components/ToastContainer";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 export default function DeleteVehicle({ params }: any) {
   const id = params.id;
   const router = useRouter();
+  const toast = useToast();
+  const [showConfirm, setShowConfirm] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const remove = async () => {
-    const r = await fetch(`${ENDPOINTS.VEHICLES}${id}/`, {
-      method: "DELETE",
-      ...withSession(),
-    });
+    setLoading(true);
+    try {
+      const r = await fetch(`/api/proxy/vehicles/${id}/`, {
+        method: "DELETE",
+        credentials: "include",
+      });
 
-    router.push("/vehicles");
+      if (!r.ok) {
+        const text = await r.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { detail: text || "Error desconocido" };
+        }
+        toast.error(data.detail || "Error al eliminar el vehículo");
+        return;
+      }
+
+      toast.success("Vehículo eliminado correctamente");
+      router.push("/vehicles");
+    } catch (error) {
+      console.error("Error:", error);
+      toast.error("Error al eliminar el vehículo");
+    } finally {
+      setLoading(false);
+      setShowConfirm(false);
+    }
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold text-red-600">
-        Eliminar Vehículo
-      </h1>
-
-      <p>¿Seguro que deseas eliminar este vehículo? Esta acción no se puede deshacer.</p>
-
-      <button
-        onClick={remove}
-        className="px-4 py-2 bg-red-600 text-white rounded"
-      >
-        Sí, eliminar
-      </button>
-
-      <button
-        onClick={() => router.push("/vehicles")}
-        className="px-4 py-2 bg-gray-300 rounded"
-      >
-        Cancelar
-      </button>
-    </div>
+    <ConfirmDialog
+      isOpen={showConfirm}
+      title="Eliminar Vehículo"
+      message="¿Estás seguro de que deseas eliminar este vehículo? Esta acción no se puede deshacer."
+      confirmText={loading ? "Eliminando..." : "Sí, eliminar"}
+      cancelText="Cancelar"
+      onConfirm={remove}
+      onCancel={() => router.back()}
+      type="danger"
+    />
   );
 }

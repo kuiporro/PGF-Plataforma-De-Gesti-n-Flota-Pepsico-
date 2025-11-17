@@ -1,26 +1,61 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const PUBLIC = ["/auth/login", "/favicon.ico", "/"];
+// Rutas que requieren autenticación
+const protectedRoutes = [
+  "/dashboard",
+  "/users",
+  "/vehicles",
+  "/workorders",
+  "/profile",
+];
 
-export function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl;
+// Rutas públicas (no requieren autenticación)
+const publicRoutes = [
+  "/auth/login",
+  "/auth/reset-password",
+];
 
-  if (PUBLIC.some((p) => pathname.startsWith(p))) {
+export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  const token = request.cookies.get("pgf_access");
+
+  // Permitir acceso a rutas de API
+  if (pathname.startsWith("/api")) {
     return NextResponse.next();
   }
 
-  const token = req.cookies.get("pgf_access")?.value;  // ← CAMBIO CLAVE
+  // Si es una ruta pública, permitir acceso
+  if (publicRoutes.some(route => pathname.startsWith(route))) {
+    return NextResponse.next();
+  }
 
-  if (!token) {
-    const url = new URL("/auth/login", req.url);
-    url.searchParams.set("next", pathname);
-    return NextResponse.redirect(url);
+  // Si es la raíz, permitir (ya tiene su propia lógica de redirección)
+  if (pathname === "/") {
+    return NextResponse.next();
+  }
+
+  // Si es una ruta protegida y no hay token, redirigir al login
+  if (protectedRoutes.some(route => pathname.startsWith(route))) {
+    if (!token) {
+      const loginUrl = new URL("/auth/login", request.url);
+      loginUrl.searchParams.set("next", pathname);
+      return NextResponse.redirect(loginUrl);
+    }
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/((?!_next|static).*)"],
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes) - pero las manejamos dentro del middleware
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     */
+    "/((?!_next/static|_next/image|favicon.ico).*)",
+  ],
 };

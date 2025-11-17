@@ -49,6 +49,31 @@ urlpatterns = [
     # WORKORDERS
     # ----------------------------
     path("api/v1/work/", include("apps.workorders.urls")),
+    
+    # ----------------------------
+    # INVENTORY
+    # ----------------------------
+    path("api/v1/inventory/", include("apps.inventory.urls")),
+    
+    # ----------------------------
+    # REPORTS
+    # ----------------------------
+    path("api/v1/reports/", include("apps.reports.urls")),
+    
+    # ----------------------------
+    # DRIVERS (CHOFERES)
+    # ----------------------------
+    path("api/v1/drivers/", include("apps.drivers.urls")),
+    
+    # ----------------------------
+    # SCHEDULING (AGENDA)
+    # ----------------------------
+    path("api/v1/scheduling/", include("apps.scheduling.urls")),
+    
+    # ----------------------------
+    # EMERGENCIES
+    # ----------------------------
+    path("api/v1/emergencies/", include("apps.emergencies.urls")),
 ]
 
 if settings.DEBUG:

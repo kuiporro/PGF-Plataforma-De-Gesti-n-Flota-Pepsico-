@@ -1,102 +1,240 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ENDPOINTS, ALL_ROLES } from "@/lib/constants";
-import { withSession } from "@/lib/api.client";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
+import { useToast } from "@/components/ToastContainer";
+import { validateRequired, validateEmail } from "@/lib/validations";
+import RoleGuard from "@/components/RoleGuard";
+import { ALL_ROLES } from "@/lib/constants";
 
-export default function EditUser({ params }: any) {
-  const id = params.id;
+export default function EditUser() {
+  const params = useParams();
+  const id = params?.id as string;
   const router = useRouter();
+  const toast = useToast();
 
   const [form, setForm] = useState<any>(null);
-  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const load = async () => {
-    try {
-      const r = await fetch(`${ENDPOINTS.USERS}${id}/`, withSession());
-      const j = await r.json();
-      setForm(j);
-    } catch (e) {
-      console.error(e);
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const r = await fetch(`/api/proxy/users/${id}/`, {
+          credentials: "include",
+        });
+
+        if (!r.ok) {
+          toast.error("Error al cargar el usuario");
+          router.push("/users");
+          return;
+        }
+
+        const text = await r.text();
+        if (!text || text.trim() === "") {
+          toast.error("Usuario no encontrado");
+          router.push("/users");
+          return;
+        }
+
+        const data = JSON.parse(text);
+        setForm(data);
+      } catch (e) {
+        console.error("Error:", e);
+        toast.error("Error al cargar el usuario");
+        router.push("/users");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (id) load();
+  }, [id, router, toast]);
+
+  const updateField = (key: string, value: string) => {
+    setForm({ ...form, [key]: value });
+    if (errors[key]) {
+      setErrors({ ...errors, [key]: "" });
     }
   };
 
-  useEffect(() => {
-    load();
-  }, []);
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
 
-  const handleChange = (e: any) =>
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const firstNameError = validateRequired(form.first_name, "Nombre");
+    if (firstNameError) newErrors.first_name = firstNameError;
+
+    const lastNameError = validateRequired(form.last_name, "Apellido");
+    if (lastNameError) newErrors.last_name = lastNameError;
+
+    const emailError = validateRequired(form.email, "Email") || validateEmail(form.email);
+    if (emailError) newErrors.email = emailError;
+
+    if (form.rut) {
+      const rutClean = form.rut.replace(/[.-]/g, "").toUpperCase();
+      // Acepta 7-9 dígitos seguidos de un dígito verificador (0-9 o K)
+      if (!/^\d{7,9}[0-9K]$/.test(rutClean)) {
+        newErrors.rut = "RUT inválido. Debe ser sin puntos ni guión (ej: 123456789 o 12345678K)";
+      }
+    }
+
+    const usernameError = validateRequired(form.username, "Usuario");
+    if (usernameError) newErrors.username = usernameError;
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const save = async () => {
-    setError("");
+    if (!validateForm()) {
+      toast.error("Por favor corrige los errores en el formulario");
+      return;
+    }
+
+    setSaving(true);
+    setErrors({});
+
     try {
-      const r = await fetch(`${ENDPOINTS.USERS}${id}/`, {
+      const r = await fetch(`/api/proxy/users/${id}/`, {
         method: "PUT",
-        ...withSession(),
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(form),
       });
 
+      const text = await r.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { detail: text || "Error desconocido" };
+      }
+
       if (!r.ok) {
-        const j = await r.json();
-        setError(JSON.stringify(j));
+        toast.error(data.detail || "Error al actualizar el usuario");
+        if (data.errors) {
+          setErrors(data.errors);
+        }
         return;
       }
 
+      toast.success("Usuario actualizado correctamente");
       router.push("/users");
     } catch (e: any) {
-      setError(e.message);
+      console.error("Error:", e);
+      toast.error("Error al actualizar el usuario");
+    } finally {
+      setSaving(false);
     }
   };
 
-  if (!form) return <p className="p-6">Cargando...</p>;
-
-  return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold">Editar Usuario</h1>
-
-      {error && <p className="text-red-600">{error}</p>}
-
-      <div className="space-y-3 max-w-xl">
-        {["first_name", "last_name", "email", "username"].map((key) => (
-          <div key={key}>
-            <label className="block font-semibold capitalize">{key}</label>
-            <input
-              name={key}
-              value={form[key] || ""}
-              onChange={handleChange}
-              className="border p-2 rounded w-full"
-            />
-          </div>
-        ))}
-
-        <div>
-          <label className="block font-semibold">Rol</label>
-          <select
-            name="rol"
-            value={form.rol}
-            onChange={handleChange}
-            className="border p-2 rounded w-full"
-          >
-            {ALL_ROLES.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
+  if (loading || !form) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
+          <p className="mt-4 text-gray-600 dark:text-gray-400">Cargando...</p>
         </div>
       </div>
+    );
+  }
 
-      <button
-        onClick={save}
-        className="px-4 py-2 bg-blue-600 text-white rounded"
-      >
-        Guardar Cambios
-      </button>
-    </div>
+  const fields = [
+    { key: "first_name", label: "Nombre", type: "text" },
+    { key: "last_name", label: "Apellido", type: "text" },
+    { key: "username", label: "Usuario", type: "text" },
+    { key: "email", label: "Email", type: "email" },
+    { key: "rut", label: "RUT", type: "text" },
+  ];
+
+  return (
+    <RoleGuard allow={["ADMIN", "SUPERVISOR"]}>
+      <div className="p-6 max-w-2xl mx-auto">
+        <h1 className="text-3xl font-bold mb-6 text-gray-900 dark:text-white">Editar Usuario</h1>
+
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-6">
+          {fields.map((field) => (
+            <div key={field.key}>
+              <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                {field.label} *
+              </label>
+              <input
+                type={field.type}
+                className={`input w-full ${errors[field.key] ? "border-red-500" : ""}`}
+                value={form[field.key] || ""}
+                onChange={(e) => {
+                  if (field.key === "rut") {
+                    let value = e.target.value.replace(/[^0-9kK]/gi, "").toUpperCase();
+                    // Limitar a 10 caracteres máximo (9 dígitos + 1 verificador)
+                    if (value.length > 10) value = value.slice(0, 10);
+                    updateField(field.key, value);
+                  } else {
+                    updateField(field.key, e.target.value);
+                  }
+                }}
+                maxLength={field.key === "rut" ? 10 : undefined}
+              />
+              {field.key === "rut" && (
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Sin puntos ni guión (ej: 123456789)
+                </p>
+              )}
+              {errors[field.key] && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors[field.key]}</p>
+              )}
+            </div>
+          ))}
+
+          <div>
+            <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+              Rol *
+            </label>
+            <select
+              className="input w-full"
+              value={form.rol || ""}
+              onChange={(e) => updateField("rol", e.target.value)}
+            >
+              {ALL_ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex gap-4 pt-4">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="flex-1 px-4 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving}
+              className="flex-1 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {saving ? (
+                <span className="flex items-center justify-center">
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Guardando...
+                </span>
+              ) : (
+                "Guardar Cambios"
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </RoleGuard>
   );
 }
+
