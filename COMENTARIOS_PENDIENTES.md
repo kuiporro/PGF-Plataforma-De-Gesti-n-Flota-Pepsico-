@@ -20,14 +20,14 @@ Este documento lista los archivos que aún necesitan comentarios detallados.
 ### Backend
 
 #### Modelos
-- [ ] `apps/workorders/models.py` - OrdenTrabajo, ItemOT, Pausa, Evidencia, etc.
-- [ ] `apps/vehicles/models.py` - Vehiculo, IngresoVehiculo, EvidenciaIngreso
+- [x] `apps/workorders/models.py` - OrdenTrabajo, ItemOT, Pausa, Evidencia, etc. ✅
+- [x] `apps/vehicles/models.py` - Vehiculo, IngresoVehiculo, EvidenciaIngreso ✅
 - [ ] `apps/drivers/models.py` - Chofer, HistorialAsignacionVehiculo
 - [ ] `apps/scheduling/models.py` - Agenda, CupoDiario
 - [ ] `apps/emergencies/models.py` - EmergenciaRuta
 
 #### Vistas
-- [ ] `apps/workorders/views.py` - OrdenTrabajoViewSet y acciones
+- [x] `apps/workorders/views.py` - OrdenTrabajoViewSet y acciones ✅
 - [ ] `apps/vehicles/views.py` - VehiculoViewSet
 - [ ] `apps/drivers/views.py` - ChoferViewSet
 - [ ] `apps/scheduling/views.py` - AgendaViewSet, CupoDiarioViewSet
@@ -73,9 +73,9 @@ Este documento lista los archivos que aún necesitan comentarios detallados.
 ## 📋 Prioridad de Comentarios
 
 ### Fase 1 (Crítico - Hacer primero)
-1. `apps/workorders/models.py` - Modelo central del sistema
-2. `apps/workorders/views.py` - Lógica de negocio de OT
-3. `apps/vehicles/models.py` - Modelo de vehículos
+1. ✅ `apps/workorders/models.py` - Modelo central del sistema
+2. ✅ `apps/workorders/views.py` - Lógica de negocio de OT
+3. ✅ `apps/vehicles/models.py` - Modelo de vehículos
 4. `frontend/src/app/workorders/page.tsx` - Página principal de OT
 5. `frontend/src/components/Sidebar.tsx` - Navegación principal
 
