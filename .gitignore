@@ -142,3 +142,7 @@ poetry.lock
 # Plan de pruebas (no subir a GitHub)
 PLAN_PRUEBAS.md
 
+# Test results and reports (no subir a GitHub, pero mantener estructura)
+test-results/
+*.xml
+htmlcov/
