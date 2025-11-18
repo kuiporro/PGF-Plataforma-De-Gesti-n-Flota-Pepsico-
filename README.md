@@ -22,7 +22,11 @@ Sistema completo de gestión de flota vehicular desarrollado para PepsiCo, con g
 - Control de acceso basado en roles (RBAC)
 - Recuperación de contraseña por email
 - Cambio de contraseña (usuario y admin)
-- Validación de RUT chileno
+- **Validaciones robustas**:
+  - Correo único y formato válido
+  - RUT chileno válido con dígito verificador y único
+  - Rol válido contra lista permitida
+  - Usuario inactivo no puede iniciar sesión
 
 ### 🚗 Gestión de Vehículos
 - CRUD completo de vehículos
@@ -31,7 +35,13 @@ Sistema completo de gestión de flota vehicular desarrollado para PepsiCo, con g
 - Categorías: Reparto, Ventas, Respaldo
 - Ingreso y salida de vehículos al taller
 - Evidencias fotográficas (S3)
-- Historial de mantenimientos
+- Historial completo de mantenimientos y backups
+- **Validaciones robustas**:
+  - Patente única y formato válido (AA1234, AAAA12, AAAB12)
+  - Datos obligatorios (patente, marca, modelo, año, tipo, site, supervisor)
+  - Año válido (2000 - año actual)
+  - No permite cambiar Site si tiene OT activa
+  - Sistema de backups con validación de disponibilidad
 
 ### 🔧 Órdenes de Trabajo (OT)
 - Flujo completo de OT con estados:
@@ -45,8 +55,15 @@ Sistema completo de gestión de flota vehicular desarrollado para PepsiCo, con g
 - Items de trabajo (repuestos y servicios)
 - Presupuestos con aprobaciones
 - Checklists de calidad
-- Evidencias fotográficas
+- Evidencias fotográficas (hasta 3GB por archivo)
 - Auditoría completa de acciones
+- **Validaciones robustas**:
+  - Vehículo debe existir
+  - No permite OT duplicadas (vehículo no puede tener otra OT activa)
+  - Campos obligatorios (motivo, supervisor, site, fecha_apertura)
+  - Solo permite pausar si está EN_EJECUCION
+  - Requiere fecha_cierre y diagnostico_final al cerrar
+  - Cálculo automático de SLA y tiempos en taller
 
 ### 📅 Programación y Agenda
 - Programación de mantenimientos preventivos
@@ -75,16 +92,50 @@ Sistema completo de gestión de flota vehicular desarrollado para PepsiCo, con g
   - Productividad (7 días)
   - Vehículos en taller
   - Métricas de eficiencia
-- **Reportes PDF**:
-  - Diario
-  - Semanal
-  - Mensual
+- **Reportes PDF completos** (7 tipos):
+  - Estado de Flota (General)
+  - Órdenes de Trabajo
+  - Uso/Comportamiento Operativo de Vehículos
+  - Mantenimientos Recurrentes
+  - Por Site/Zona/Supervisor
+  - Cumplimiento y Política
+  - Inventario/Características de Vehículos
+- **Reportes básicos**: Diario, Semanal, Mensual
 - Generación con ReportLab y branding PepsiCo
+- **Validaciones robustas**:
+  - Rangos de fecha válidos (fecha_inicio <= fecha_fin)
+  - Permisos por rol (supervisores solo ven su Site, guardias no acceden)
+  - Manejo de historial vacío sin errores
 
 ### 🔄 Tareas Automáticas (Celery)
 - Colación automática (12:30-13:15)
 - Generación de PDFs de cierre
 - Tareas programadas con Celery Beat
+
+### 🔔 Sistema de Notificaciones
+- Notificaciones en tiempo real vía WebSocket
+- Notificaciones push del navegador (Service Worker)
+- Notificaciones por email (opcional)
+- Sonidos de alerta (opcional)
+- Badge con contador de no leídas
+- Preferencias de usuario configurables
+- Notificaciones para: OT creada/asignada/cerrada/aprobada/rechazada, evidencias importantes
+
+### ✅ Sistema de Validaciones
+- **Validadores reutilizables** en `apps/core/validators.py`:
+  - RUT chileno (formato y dígito verificador)
+  - Formato de patente chilena
+  - Formato de correo electrónico
+  - Validación de año
+  - Validación de rol
+  - Validación de rangos de fecha
+- **Validaciones integradas** en serializers y views:
+  - Usuarios: correo único, RUT único, rol válido
+  - Vehículos: patente única, formato válido, datos obligatorios, año válido
+  - OT: vehículo existente, no duplicadas, campos obligatorios, reglas de pausa/cierre
+  - Guardia: datos mínimos, RUT conductor válido, no OT activa
+  - Backups: operativo, no utilizado, no mismo vehículo
+  - Reportes: rangos de fecha, permisos por rol
 
 ## 🏗️ Arquitectura
 
@@ -105,12 +156,19 @@ Sistema completo de gestión de flota vehicular desarrollado para PepsiCo, con g
 - **Estado Global**: Zustand
 - **HTTP Client**: Fetch API con proxy routes
 - **Iconos**: Heroicons
-- **Notificaciones**: Toast system personalizado
+- **Notificaciones**: 
+  - Toast system personalizado
+  - WebSocket para notificaciones en tiempo real
+  - Service Worker para push notifications
+  - Badge con contador de no leídas
+  - Preferencias de usuario configurables
 
 ### DevOps
 - **Contenedores**: Docker + Docker Compose
 - **Gestión de Dependencias**: Poetry (Python) + npm (Node.js)
 - **CI/CD**: Preparado para GitHub Actions
+- **WebSockets**: Django Channels con Redis como channel layer
+- **ASGI Server**: Daphne para soporte HTTP y WebSocket
 
 ## 🚀 Inicio Rápido
 
@@ -160,18 +218,31 @@ pgf/
 │   │   ├── serializers.py         # Serializers para API
 │   │   ├── permissions.py         # Permisos personalizados
 │   │   └── auth_urls.py           # URLs de autenticación
+│   ├── core/                      # Utilidades compartidas
+│   │   ├── validators.py          # Validadores reutilizables
+│   │   └── serializers.py         # Serializers base
 │   ├── vehicles/                  # Gestión de vehículos
+│   │   ├── models.py              # Vehiculo, HistorialVehiculo, BackupVehiculo
+│   │   ├── serializers.py         # Serializers con validaciones
+│   │   └── utils.py               # Funciones de historial y backups
 │   ├── workorders/                # Órdenes de trabajo
 │   │   ├── models.py              # OrdenTrabajo, ItemOT, Pausa, etc.
 │   │   ├── views.py               # ViewSets con acciones personalizadas
+│   │   ├── serializers.py         # Serializers con validaciones
 │   │   ├── services.py            # Lógica de transiciones de estado
 │   │   └── tasks_colacion.py     # Tareas Celery para colación
 │   ├── drivers/                   # Gestión de choferes
 │   ├── scheduling/                # Programación y agenda
 │   ├── emergencies/               # Emergencias en ruta
 │   ├── reports/                   # Reportes y dashboards
-│   │   ├── views.py               # Vistas de reportes
-│   │   └── pdf_generator.py      # Generación de PDFs
+│   │   ├── views.py               # Vistas de reportes con validaciones
+│   │   ├── pdf_generator.py      # Generación de PDFs básicos
+│   │   └── pdf_generator_completo.py  # Generación de 7 reportes completos
+│   ├── notifications/            # Sistema de notificaciones
+│   │   ├── models.py              # Modelo Notification
+│   │   ├── views.py               # API de notificaciones
+│   │   ├── consumers.py          # WebSocket consumers
+│   │   └── utils.py               # Utilidades de notificaciones
 │   └── inventory/                 # Inventario (futuro)
 ├── pgf_core/                      # Configuración Django
 │   ├── settings/                  # Settings por ambiente
@@ -247,8 +318,6 @@ La documentación interactiva está disponible en:
 
 ## 🧪 Testing
 
-Ver [PLAN_PRUEBAS.md](./PLAN_PRUEBAS.md) para el plan completo de pruebas.
-
 ### Ejecutar Tests
 
 ```bash
@@ -295,27 +364,6 @@ docker-compose exec api poetry run python manage.py seed_demo
 docker-compose ps
 ```
 
-## 🐛 Troubleshooting
-
-### Error de conexión a base de datos
-- Verificar que PostgreSQL esté corriendo: `docker-compose ps db`
-- Verificar variables de entorno en `.env`
-- Verificar logs: `docker-compose logs db`
-
-### Error "Unexpected end of JSON input"
-- ✅ **Corregido**: Se implementó manejo robusto de errores en todas las llamadas fetch
-
-### Error "Failed to fetch"
-- ✅ **Corregido**: Se agregó manejo de errores en DashboardLayout y todas las rutas API
-
-### Error de migraciones
-- Verificar que la base de datos esté inicializada
-- Ejecutar: `docker-compose exec api poetry run python manage.py migrate`
-
-### Celery no ejecuta tareas
-- Verificar que Redis esté corriendo: `docker-compose ps redis`
-- Verificar logs del worker: `docker-compose logs worker`
-
 ## 🎨 Identidad Visual
 
 El sistema utiliza la identidad visual de PepsiCo:
@@ -336,7 +384,8 @@ Este proyecto es privado y propiedad de PepsiCo.
 
 ## 👥 Autores
 
-- **Kuiper** - diaz526.ld@gmail.com
+- **Diego Alvarez** - dr.alvarez@duocuc.cl
+- **Luis Diaz** - lu.diaza@duocuc.cl
 
 ## 🙏 Agradecimientos
 
@@ -348,5 +397,19 @@ Este proyecto es privado y propiedad de PepsiCo.
 
 ---
 
-**Versión**: 1.0.0  
-**Última actualización**: 2024
+**Versión**: 2.0.0  
+**Última actualización**: Noviembre 2024
+
+## 📝 Changelog
+
+### v2.0.0 (Noviembre 2024)
+- ✅ Sistema completo de validaciones implementado
+- ✅ Sistema de notificaciones en tiempo real (WebSocket + Push)
+- ✅ Historial completo de vehículos y backups
+- ✅ 7 tipos de reportes PDF completos
+- ✅ Cálculo automático de SLA y tiempos en taller
+- ✅ Evidencias con soporte hasta 3GB
+- ✅ Preferencias de usuario para notificaciones
+
+### v1.0.0 (2024)
+- 🎉 Versión inicial del sistema

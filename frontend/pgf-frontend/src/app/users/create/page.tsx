@@ -47,7 +47,7 @@ export default function CreateUser() {
     const usernameError = validateRequired(form.username, "Usuario");
     if (usernameError) newErrors.username = usernameError;
 
-    const passwordError = validateRequired(form.password, "Contraseña") || validateMinLength(form.password, 6, "Contraseña");
+    const passwordError = validateRequired(form.password, "Contraseña") || validateMinLength(form.password, 8, "Contraseña");
     if (passwordError) newErrors.password = passwordError;
 
     setErrors(newErrors);
@@ -202,11 +202,14 @@ export default function CreateUser() {
             </label>
             <input
               type="password"
-              placeholder="Mínimo 6 caracteres"
+              placeholder="Mínimo 8 caracteres"
               className={`input w-full ${errors.password ? "border-red-500" : ""}`}
               value={form.password}
               onChange={(e) => updateField("password", e.target.value)}
             />
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              La contraseña debe tener al menos 8 caracteres
+            </p>
             {errors.password && (
               <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.password}</p>
             )}

@@ -124,12 +124,119 @@ class Vehiculo(models.Model):
         help_text="Sucursal específica"
     )
     
+    # Site: sitio o ubicación operativa (importante para reportes)
+    site = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Site o ubicación operativa"
+    )
+    
+    # Supervisor asignado al vehículo
+    supervisor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="vehiculos_supervisados",
+        limit_choices_to={"rol__in": ["SUPERVISOR", "COORDINADOR_ZONA"]},
+        help_text="Supervisor asignado al vehículo"
+    )
+    
+    # Estado operativo: estado real del vehículo (diferente de estado)
+    ESTADO_OPERATIVO_CHOICES = (
+        ("OPERATIVO", "Operativo"),
+        ("EN_TALLER", "En Taller"),
+        ("BLOQUEADO", "Bloqueado/TCT"),
+        ("FUERA_POLITICA", "Fuera de Política"),
+        ("REVISION_VENCIDA", "Revisión Vencida"),
+        ("SIN_MOVIMIENTO", "Sin Movimiento"),
+    )
+    estado_operativo = models.CharField(
+        max_length=30,
+        choices=ESTADO_OPERATIVO_CHOICES,
+        default="OPERATIVO",
+        help_text="Estado operativo del vehículo"
+    )
+    
+    # Cumplimiento: si el vehículo está en política o fuera
+    CUMPLIMIENTO_CHOICES = (
+        ("EN_POLITICA", "En Política"),
+        ("FUERA_POLITICA", "Fuera de Política"),
+    )
+    cumplimiento = models.CharField(
+        max_length=20,
+        choices=CUMPLIMIENTO_CHOICES,
+        default="EN_POLITICA",
+        help_text="Cumplimiento de política"
+    )
+    
+    # TCT: Bloqueo Temporal (True si está bloqueado)
+    tct = models.BooleanField(
+        default=False,
+        help_text="Bloqueo Temporal (TCT) activo"
+    )
+    
+    # Fecha de inicio de TCT
+    tct_fecha_inicio = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Fecha de inicio del bloqueo TCT"
+    )
+    
+    # Días con TCT activo
+    tct_dias = models.PositiveIntegerField(
+        default=0,
+        help_text="Días con TCT activo"
+    )
+    
+    # CeCo: Centro de Costo
+    ceco = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="Centro de Costo (CeCo)"
+    )
+    
+    # Equipo SAP
+    equipo_sap = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="Equipo SAP"
+    )
+    
+    # Última revisión
+    ultima_revision = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Fecha de última revisión"
+    )
+    
+    # Próxima revisión
+    proxima_revision = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Fecha de próxima revisión"
+    )
+    
+    # Kilometraje actual
+    kilometraje_actual = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Kilometraje actual del vehículo"
+    )
+    
     # Kilometraje promedio mensual
     # Se usa para planificación de mantenimientos preventivos
     km_mensual_promedio = models.PositiveIntegerField(
         null=True,
         blank=True,
         help_text="Kilometraje promedio mensual"
+    )
+    
+    # Fecha de último movimiento (para detectar vehículos sin movimiento)
+    ultimo_movimiento = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Fecha de último movimiento registrado"
     )
 
     # ==================== TIMESTAMPS ====================
@@ -311,3 +418,243 @@ class EvidenciaIngreso(models.Model):
         Formato: "Evidencia {tipo} - {patente}"
         """
         return f"Evidencia {self.tipo} - {self.ingreso.vehiculo.patente}"
+
+
+class HistorialVehiculo(models.Model):
+    """
+    Historial completo de un vehículo.
+    
+    Registra todos los eventos importantes del vehículo:
+    - Órdenes de trabajo (abiertas, cerradas, en QA)
+    - Fechas de ingreso y salida de cada OT
+    - Tiempos de permanencia en taller
+    - Fallas recurrentes
+    - Backups utilizados
+    - Supervisor responsable de cada evento
+    - Estado operativo antes y después de cada OT
+    
+    Relaciones:
+    - ForeignKey a Vehiculo (vehiculo.historial.all())
+    - ForeignKey a OrdenTrabajo (opcional, si está relacionado con una OT)
+    - ForeignKey a User (supervisor responsable)
+    """
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    # Vehículo al que pertenece este historial
+    vehiculo = models.ForeignKey(
+        Vehiculo,
+        on_delete=models.CASCADE,
+        related_name="historial"
+    )
+    
+    # OT relacionada (opcional, puede ser un evento sin OT)
+    ot = models.ForeignKey(
+        "workorders.OrdenTrabajo",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="historial_vehiculo"
+    )
+    
+    # Tipo de evento
+    TIPO_EVENTO_CHOICES = (
+        ("OT_CREADA", "OT Creada"),
+        ("OT_CERRADA", "OT Cerrada"),
+        ("OT_EN_QA", "OT en QA"),
+        ("OT_RECHAZADA", "OT Rechazada"),
+        ("INGRESO_TALLER", "Ingreso a Taller"),
+        ("SALIDA_TALLER", "Salida de Taller"),
+        ("BACKUP_ASIGNADO", "Backup Asignado"),
+        ("BACKUP_DEVUELTO", "Backup Devuelto"),
+        ("FALLA_REGISTRADA", "Falla Registrada"),
+        ("MANTENIMIENTO", "Mantenimiento"),
+        ("OTRO", "Otro"),
+    )
+    tipo_evento = models.CharField(
+        max_length=30,
+        choices=TIPO_EVENTO_CHOICES,
+        default="OTRO"
+    )
+    
+    # Fecha de ingreso al taller (si aplica)
+    fecha_ingreso = models.DateTimeField(null=True, blank=True)
+    
+    # Fecha de salida del taller (si aplica)
+    fecha_salida = models.DateTimeField(null=True, blank=True)
+    
+    # Tiempo de permanencia en taller (en días)
+    tiempo_permanencia = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Tiempo de permanencia en taller (días)"
+    )
+    
+    # Descripción del evento
+    descripcion = models.TextField(blank=True)
+    
+    # Falla registrada (si aplica)
+    falla = models.CharField(max_length=200, blank=True)
+    
+    # Supervisor responsable
+    supervisor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="eventos_historial"
+    )
+    
+    # Site donde ocurrió el evento
+    site = models.CharField(max_length=100, blank=True)
+    
+    # Estado operativo antes del evento
+    estado_antes = models.CharField(max_length=30, blank=True)
+    
+    # Estado operativo después del evento
+    estado_despues = models.CharField(max_length=30, blank=True)
+    
+    # Backup utilizado (si aplica)
+    backup_utilizado = models.ForeignKey(
+        "vehicles.BackupVehiculo",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="eventos_historial"
+    )
+    
+    # Fecha de creación del registro
+    creado_en = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ["-creado_en"]
+        indexes = [
+            models.Index(fields=["vehiculo", "creado_en"]),
+            models.Index(fields=["tipo_evento", "creado_en"]),
+        ]
+    
+    def __str__(self):
+        return f"Historial {self.vehiculo.patente} - {self.tipo_evento} - {self.creado_en}"
+
+
+class BackupVehiculo(models.Model):
+    """
+    Registro de asignación de backup a un vehículo.
+    
+    Cuando un vehículo principal entra al taller, se le puede asignar
+    un vehículo backup para que continúe operando.
+    
+    Relaciones:
+    - ForeignKey a Vehiculo (vehiculo principal)
+    - ForeignKey a Vehiculo (vehiculo backup)
+    - ForeignKey a OrdenTrabajo (OT asociada)
+    - ForeignKey a User (supervisor que asigna)
+    """
+    
+    ESTADO_CHOICES = (
+        ("ACTIVO", "En Uso"),
+        ("DEVUELTO", "Devuelto"),
+        ("CANCELADO", "Cancelado"),
+    )
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    # Vehículo principal (el que está en taller)
+    vehiculo_principal = models.ForeignKey(
+        Vehiculo,
+        on_delete=models.PROTECT,
+        related_name="backups_recibidos"
+    )
+    
+    # Vehículo backup (el que se asigna)
+    vehiculo_backup = models.ForeignKey(
+        Vehiculo,
+        on_delete=models.PROTECT,
+        related_name="backups_asignados"
+    )
+    
+    # OT asociada (si existe)
+    ot = models.ForeignKey(
+        "workorders.OrdenTrabajo",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="backups"
+    )
+    
+    # Fecha de inicio de asignación
+    fecha_inicio = models.DateTimeField()
+    
+    # Fecha de devolución (null si aún está activo)
+    fecha_devolucion = models.DateTimeField(null=True, blank=True)
+    
+    # Duración del uso (en días, calculado)
+    duracion_dias = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Duración del uso del backup (días)"
+    )
+    
+    # Motivo de asignación
+    motivo = models.TextField()
+    
+    # Site donde se asignó
+    site = models.CharField(max_length=100, blank=True)
+    
+    # Supervisor que asigna
+    supervisor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="backups_asignados"
+    )
+    
+    # Estado del backup
+    estado = models.CharField(
+        max_length=20,
+        choices=ESTADO_CHOICES,
+        default="ACTIVO"
+    )
+    
+    # Observaciones
+    observaciones = models.TextField(blank=True)
+    
+    # Fecha de creación
+    creado_en = models.DateTimeField(auto_now_add=True)
+    
+    # Fecha de actualización
+    actualizado_en = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ["-fecha_inicio"]
+        indexes = [
+            models.Index(fields=["vehiculo_principal", "estado"]),
+            models.Index(fields=["vehiculo_backup", "estado"]),
+            models.Index(fields=["fecha_inicio"]),
+        ]
+    
+    def __str__(self):
+        return f"Backup {self.vehiculo_backup.patente} → {self.vehiculo_principal.patente}"
+    
+    def calcular_duracion(self):
+        """
+        Calcula la duración del uso del backup en días.
+        
+        Si aún está activo, calcula desde fecha_inicio hasta ahora.
+        Si está devuelto, calcula desde fecha_inicio hasta fecha_devolucion.
+        """
+        from django.utils import timezone
+        
+        if self.fecha_devolucion:
+            delta = self.fecha_devolucion - self.fecha_inicio
+        else:
+            delta = timezone.now() - self.fecha_inicio
+        
+        self.duracion_dias = delta.total_seconds() / 86400  # Convertir a días
+        self.save(update_fields=["duracion_dias"])
+        return self.duracion_dias

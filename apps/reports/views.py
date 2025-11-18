@@ -302,6 +302,15 @@ class ReporteProductividadView(views.APIView):
         else:
             fecha_fin = timezone.now()  # Default: ahora
         
+        # Validar rango de fechas
+        from apps.core.validators import validar_rango_fechas
+        es_valido, mensaje = validar_rango_fechas(fecha_inicio, fecha_fin)
+        if not es_valido:
+            return Response(
+                {"detail": mensaje},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         # OT cerradas en el período
         ot_cerradas = OrdenTrabajo.objects.filter(
             estado="CERRADA",
@@ -407,8 +416,144 @@ class ReportePDFView(views.APIView):
         fecha_fin_str = request.query_params.get("fecha_fin")
         
         from .pdf_generator import generar_reporte_semanal_pdf, generar_reporte_diario_pdf
+        from .pdf_generator_completo import (
+            generar_reporte_estado_flota,
+            generar_reporte_ordenes_trabajo,
+            generar_reporte_uso_vehiculo,
+            generar_reporte_mantenimientos_recurrentes,
+            generar_reporte_por_site,
+            generar_reporte_cumplimiento_politica,
+            generar_reporte_inventario_caracteristicas
+        )
         from datetime import datetime, timedelta
         
+        # Parsear fechas
+        fecha_inicio = None
+        fecha_fin = None
+        if fecha_inicio_str:
+            try:
+                fecha_inicio = datetime.strptime(fecha_inicio_str, "%Y-%m-%d").date()
+            except ValueError:
+                return Response(
+                    {"detail": "Formato de fecha_inicio inválido. Use YYYY-MM-DD."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        if fecha_fin_str:
+            try:
+                fecha_fin = datetime.strptime(fecha_fin_str, "%Y-%m-%d").date()
+            except ValueError:
+                return Response(
+                    {"detail": "Formato de fecha_fin inválido. Use YYYY-MM-DD."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        # Validar rango de fechas
+        if fecha_inicio and fecha_fin:
+            from apps.core.validators import validar_rango_fechas
+            es_valido, mensaje = validar_rango_fechas(fecha_inicio, fecha_fin)
+            if not es_valido:
+                return Response(
+                    {"detail": mensaje},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        # Validar permisos por rol
+        # Supervisores solo ven datos de su propio Site
+        # Guardias no pueden acceder a reportes
+        # Mecánicos solo ven OT asignadas
+        if request.user.rol == "GUARDIA":
+            return Response(
+                {"detail": "Los guardias no pueden acceder a reportes."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Si es supervisor, filtrar por su site
+        site_filter = None
+        if request.user.rol == "SUPERVISOR":
+            # Obtener el site del supervisor desde su perfil o vehículos supervisados
+            vehiculos_supervisados = Vehiculo.objects.filter(supervisor=request.user).values_list('site', flat=True).distinct()
+            if vehiculos_supervisados:
+                site_filter = list(vehiculos_supervisados)
+            else:
+                # Si no tiene vehículos asignados, no puede ver reportes
+                return Response(
+                    {"detail": "No tiene vehículos asignados para generar reportes."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Tipos de reporte completos
+        tipo_reporte = request.query_params.get("tipo_reporte")  # Nuevo parámetro para reportes completos
+        
+        if tipo_reporte:
+            # Reportes completos
+            if tipo_reporte == "estado_flota":
+                site = request.query_params.get("site")
+                supervisor = request.query_params.get("supervisor")
+                tipo_vehiculo = request.query_params.get("tipo_vehiculo")
+                estado_operativo = request.query_params.get("estado_operativo")
+                pdf_bytes = generar_reporte_estado_flota(
+                    fecha=fecha_inicio or timezone.now().date(),
+                    site=site,
+                    supervisor=supervisor,
+                    tipo_vehiculo=tipo_vehiculo,
+                    estado_operativo=estado_operativo
+                )
+            elif tipo_reporte == "ordenes_trabajo":
+                site = request.query_params.get("site")
+                if not fecha_inicio:
+                    fecha_fin = timezone.now().date()
+                    fecha_inicio = fecha_fin - timedelta(days=30)
+                if not fecha_fin:
+                    fecha_fin = timezone.now().date()
+                pdf_bytes = generar_reporte_ordenes_trabajo(
+                    fecha_inicio=fecha_inicio,
+                    fecha_fin=fecha_fin,
+                    site=site
+                )
+            elif tipo_reporte == "uso_vehiculo":
+                patente = request.query_params.get("patente")
+                if not fecha_inicio:
+                    fecha_fin = timezone.now().date()
+                    fecha_inicio = fecha_fin - timedelta(days=365)
+                if not fecha_fin:
+                    fecha_fin = timezone.now().date()
+                pdf_bytes = generar_reporte_uso_vehiculo(
+                    patente=patente,
+                    fecha_inicio=fecha_inicio,
+                    fecha_fin=fecha_fin
+                )
+            elif tipo_reporte == "mantenimientos":
+                pdf_bytes = generar_reporte_mantenimientos_recurrentes(fecha=fecha_inicio or timezone.now().date())
+            elif tipo_reporte == "por_site":
+                site = request.query_params.get("site")
+                if not fecha_inicio:
+                    fecha_fin = timezone.now().date()
+                    fecha_inicio = fecha_fin - timedelta(days=30)
+                if not fecha_fin:
+                    fecha_fin = timezone.now().date()
+                pdf_bytes = generar_reporte_por_site(
+                    site=site,
+                    fecha_inicio=fecha_inicio,
+                    fecha_fin=fecha_fin
+                )
+            elif tipo_reporte == "cumplimiento":
+                pdf_bytes = generar_reporte_cumplimiento_politica(fecha=fecha_inicio or timezone.now().date())
+            elif tipo_reporte == "inventario":
+                pdf_bytes = generar_reporte_inventario_caracteristicas(fecha=fecha_inicio or timezone.now().date())
+            else:
+                return Response(
+                    {"detail": f"Tipo de reporte '{tipo_reporte}' no válido."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Retornar PDF
+            from django.http import HttpResponse
+            response = HttpResponse(pdf_bytes, content_type='application/pdf')
+            fecha_str = (fecha_inicio or timezone.now().date()).strftime('%Y-%m-%d')
+            response['Content-Disposition'] = f'attachment; filename="reporte_{tipo_reporte}_{fecha_str}.pdf"'
+            return response
+        
+        # Reportes originales (diario, semanal, mensual)
         if tipo == "diario":
             # Reporte diario
             fecha = None

@@ -81,9 +81,24 @@ export default function ReportsPage() {
   };
 
   return (
-    <RoleGuard allow={["EJECUTIVO", "ADMIN", "JEFE_TALLER", "SUPERVISOR", "COORDINADOR_ZONA"]}>
+    <RoleGuard allow={["EJECUTIVO", "ADMIN", "JEFE_TALLER", "SUPERVISOR", "COORDINADOR_ZONA", "SPONSOR"]}>
       <div className="p-6">
-        <h1 className="text-3xl font-bold mb-6 text-gray-900 dark:text-white">Reportes</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Reportes</h1>
+          {/* Botón rápido de reporte diario */}
+          <button
+            onClick={() => {
+              const hoy = new Date().toISOString().split('T')[0];
+              setFechaInicio(hoy);
+              downloadPDF("diario");
+            }}
+            disabled={loading}
+            className="px-6 py-3 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+            style={{ backgroundColor: '#003DA5' }}
+          >
+            {loading ? "Generando..." : "📊 Reporte de Hoy"}
+          </button>
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {/* Reporte Diario */}

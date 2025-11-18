@@ -139,3 +139,6 @@ poetry.lock
 *.backup
 *.old
 
+# Plan de pruebas (no subir a GitHub)
+PLAN_PRUEBAS.md
+

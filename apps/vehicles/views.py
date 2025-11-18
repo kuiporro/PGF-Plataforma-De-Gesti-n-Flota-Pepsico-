@@ -31,10 +31,11 @@ from django.db import transaction  # Para transacciones atómicas
 from django.utils import timezone  # Para timestamps
 from drf_spectacular.utils import extend_schema  # Para documentación OpenAPI
 
-from .models import Vehiculo, IngresoVehiculo, EvidenciaIngreso
+from .models import Vehiculo, IngresoVehiculo, EvidenciaIngreso, HistorialVehiculo, BackupVehiculo
 from .serializers import (
     VehiculoSerializer, VehiculoListSerializer,
-    IngresoVehiculoSerializer, EvidenciaIngresoSerializer
+    IngresoVehiculoSerializer, EvidenciaIngresoSerializer,
+    HistorialVehiculoSerializer, BackupVehiculoSerializer
 )
 from .permissions import VehiclePermission
 from apps.workorders.models import Auditoria
@@ -232,7 +233,19 @@ class VehiculoViewSet(viewsets.ModelViewSet):
             motivo=motivo or "Ingreso al taller",
             prioridad=request.data.get("prioridad", "MEDIA"),
             zona=request.data.get("zona", vehiculo.zona or ""),
+            site=request.data.get("site", vehiculo.site or ""),
+            causa_ingreso=request.data.get("observaciones", ""),
         )
+        
+        # Registrar en historial y calcular SLA
+        try:
+            from apps.vehicles.utils import registrar_ot_creada, calcular_sla_ot
+            registrar_ot_creada(ot, request.user)
+            calcular_sla_ot(ot)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error al registrar historial para OT {ot.id}: {e}")
         
         # Vincular OT con agenda si existe
         if agenda:
@@ -460,3 +473,140 @@ class VehiculoViewSet(viewsets.ModelViewSet):
             "total_repuestos": len(historial_repuestos),
             "total_ingresos": len(ingresos_data),
         })
+
+
+class HistorialVehiculoViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet para consultar historial de vehículos.
+    
+    Solo lectura (ReadOnly) porque el historial se crea automáticamente
+    cuando ocurren eventos (OT creada, OT cerrada, backup asignado, etc.)
+    
+    Endpoints:
+    - GET /api/v1/vehicles/historial/ → Listar todos los eventos de historial
+    - GET /api/v1/vehicles/historial/{id}/ → Ver evento específico
+    - GET /api/v1/vehicles/historial/?vehiculo={id} → Filtrar por vehículo
+    - GET /api/v1/vehicles/historial/?tipo_evento=OT_CREADA → Filtrar por tipo
+    """
+    queryset = HistorialVehiculo.objects.all().select_related(
+        'vehiculo', 'ot', 'supervisor', 'backup_utilizado'
+    ).order_by('-creado_en')
+    serializer_class = HistorialVehiculoSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['vehiculo', 'tipo_evento', 'site']
+    search_fields = ['descripcion', 'falla']
+    ordering_fields = ['creado_en', 'fecha_ingreso', 'fecha_salida']
+
+
+class BackupVehiculoViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gestionar backups de vehículos.
+    
+    Endpoints:
+    - GET /api/v1/vehicles/backups/ → Listar todos los backups
+    - POST /api/v1/vehicles/backups/ → Crear nuevo backup
+    - GET /api/v1/vehicles/backups/{id}/ → Ver backup específico
+    - PUT/PATCH /api/v1/vehicles/backups/{id}/ → Actualizar backup
+    - DELETE /api/v1/vehicles/backups/{id}/ → Eliminar backup
+    
+    Acciones personalizadas:
+    - POST /api/v1/vehicles/backups/{id}/devolver/ → Devolver backup
+    """
+    queryset = BackupVehiculo.objects.all().select_related(
+        'vehiculo_principal', 'vehiculo_backup', 'ot', 'supervisor'
+    ).order_by('-fecha_inicio')
+    serializer_class = BackupVehiculoSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['vehiculo_principal', 'vehiculo_backup', 'estado', 'site']
+    search_fields = ['motivo', 'observaciones']
+    ordering_fields = ['fecha_inicio', 'fecha_devolucion', 'duracion_dias']
+    
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        """
+        Crea un nuevo backup y registra en historial.
+        """
+        response = super().create(request, *args, **kwargs)
+        
+        if response.status_code == status.HTTP_201_CREATED:
+            backup = BackupVehiculo.objects.get(id=response.data['id'])
+            
+            # Registrar en historial
+            try:
+                from apps.vehicles.utils import registrar_backup_asignado
+                registrar_backup_asignado(backup)
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error al registrar historial para backup {backup.id}: {e}")
+        
+        return response
+    
+    @extend_schema(
+        description="Marca un backup como devuelto y calcula la duración",
+        responses={200: BackupVehiculoSerializer}
+    )
+    @action(detail=True, methods=['post'], url_path='devolver')
+    @transaction.atomic
+    def devolver(self, request, pk=None):
+        """
+        Marca un backup como devuelto.
+        
+        Endpoint: POST /api/v1/vehicles/backups/{id}/devolver/
+        
+        Proceso:
+        1. Valida que el backup esté activo
+        2. Establece fecha_devolucion = ahora
+        3. Cambia estado a DEVUELTO
+        4. Calcula duración automáticamente
+        5. Crea evento en historial del vehículo principal
+        """
+        backup = self.get_object()
+        
+        if backup.estado != "ACTIVO":
+            return Response(
+                {"detail": "Solo se pueden devolver backups activos."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Marcar como devuelto
+        backup.fecha_devolucion = timezone.now()
+        backup.estado = "DEVUELTO"
+        backup.calcular_duracion()
+        backup.save()
+        
+        # Crear evento en historial
+        from apps.vehicles.utils import registrar_evento_historial
+        registrar_evento_historial(
+            vehiculo=backup.vehiculo_principal,
+            tipo_evento="BACKUP_DEVUELTO",
+            ot=backup.ot,
+            supervisor=request.user,
+            site=backup.site,
+            descripcion=f"Backup {backup.vehiculo_backup.patente} devuelto. Duración: {backup.duracion_dias:.2f} días",
+            fecha_salida=backup.fecha_devolucion,
+            backup=backup,
+        )
+        
+        # Si el vehículo principal no tiene más backups activos, cambiar estado a OPERATIVO
+        backups_activos = BackupVehiculo.objects.filter(
+            vehiculo_principal=backup.vehiculo_principal,
+            estado="ACTIVO"
+        ).exists()
+        
+        if not backups_activos:
+            # Verificar si hay OTs abiertas
+            from apps.workorders.models import OrdenTrabajo
+            ots_abiertas = OrdenTrabajo.objects.filter(
+                vehiculo=backup.vehiculo_principal,
+                estado__in=["ABIERTA", "EN_DIAGNOSTICO", "EN_EJECUCION", "EN_PAUSA", "EN_QA"]
+            ).exists()
+            
+            if not ots_abiertas:
+                backup.vehiculo_principal.estado_operativo = "OPERATIVO"
+                backup.vehiculo_principal.save(update_fields=["estado_operativo"])
+        
+        serializer = self.get_serializer(backup)
+        return Response(serializer.data)

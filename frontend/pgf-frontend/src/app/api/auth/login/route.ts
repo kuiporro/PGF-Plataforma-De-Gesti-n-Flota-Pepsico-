@@ -42,7 +42,17 @@ export async function POST(req: NextRequest) {
     }
 
     if (!r.ok) {
-      return NextResponse.json({ detail: data.detail ?? "Error" }, { status: r.status || 401 });
+      // Logging para debugging
+      console.error("Login failed:", {
+        status: r.status,
+        statusText: r.statusText,
+        data: data,
+        text: text.substring(0, 200) // Primeros 200 caracteres
+      });
+      
+      // Retornar mensaje de error más descriptivo
+      const errorMessage = data.detail || data.message || data.error || "Error al iniciar sesión";
+      return NextResponse.json({ detail: errorMessage }, { status: r.status || 401 });
     }
 
     // Validate required fields

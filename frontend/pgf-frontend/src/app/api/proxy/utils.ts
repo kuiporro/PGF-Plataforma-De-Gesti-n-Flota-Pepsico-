@@ -15,7 +15,7 @@
  * - next/server: NextRequest, NextResponse, cookies
  * 
  * Uso:
- * - Importado en todas las API routes de proxy (apps/api/proxy/*/route.ts)
+ * - Importado en todas las API routes de proxy (ej: apps/api/proxy/reports/route.ts)
  * - Centraliza la lógica de comunicación con el backend
  */
 

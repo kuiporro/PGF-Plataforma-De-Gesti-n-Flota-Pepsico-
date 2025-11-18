@@ -24,6 +24,14 @@ class ItemOTCreateSerializer(serializers.ModelSerializer):
         exclude = ('ot',)
 
 class OrdenTrabajoSerializer(serializers.ModelSerializer):
+    """
+    Serializer para OrdenTrabajo.
+    
+    Validaciones implementadas:
+    - Vehículo existente
+    - No permitir OT duplicadas (vehículo no puede tener otra OT activa)
+    - Campos obligatorios (motivo, supervisor, site, fecha_apertura)
+    """
     # Ahora Python ya sabe qué es ItemOTSerializer
     items = ItemOTSerializer(many=True, read_only=True)
     items_data = ItemOTCreateSerializer(many=True, write_only=True, required=False)
@@ -37,6 +45,52 @@ class OrdenTrabajoSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrdenTrabajo
         fields = '__all__'
+    
+    def validate_vehiculo(self, value):
+        """
+        Valida que el vehículo exista.
+        """
+        if not value:
+            raise serializers.ValidationError("El vehículo es obligatorio.")
+        return value
+    
+    def validate(self, attrs):
+        """
+        Validaciones a nivel de objeto completo.
+        """
+        # Validar campos obligatorios
+        campos_obligatorios = {
+            'motivo': 'motivo de ingreso',
+            'supervisor': 'supervisor',
+            'site': 'site',
+            'apertura': 'fecha de apertura'
+        }
+        
+        for campo, nombre_display in campos_obligatorios.items():
+            if campo not in attrs:
+                if self.instance:
+                    # En actualización, si no viene en attrs, usar el valor actual
+                    if not getattr(self.instance, campo, None):
+                        raise serializers.ValidationError({campo: f"El campo {nombre_display} es obligatorio."})
+                else:
+                    # En creación, el campo debe estar en attrs
+                    raise serializers.ValidationError({campo: f"El campo {nombre_display} es obligatorio."})
+        
+        # Validar que el vehículo no tenga otra OT activa (solo en creación)
+        if not self.instance:  # Solo validar en creación
+            vehiculo = attrs.get('vehiculo')
+            if vehiculo:
+                ots_activas = OrdenTrabajo.objects.filter(
+                    vehiculo=vehiculo,
+                    estado__in=['ABIERTA', 'EN_EJECUCION', 'QA', 'EN_DIAGNOSTICO', 'EN_PAUSA']
+                ).exists()
+                
+                if ots_activas:
+                    raise serializers.ValidationError({
+                        'vehiculo': "Este vehículo ya cuenta con una OT activa."
+                    })
+        
+        return attrs
 
     def create(self, validated_data):
         items_data = validated_data.pop('items_data', [])
@@ -70,12 +124,37 @@ class AprobacionSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 class PausaSerializer(serializers.ModelSerializer):
+    """
+    Serializer para Pausa.
+    
+    Validaciones implementadas:
+    - No permitir pausar si la OT no está EN_EJECUCION
+    - No permitir reanudar si la OT no está EN_PAUSA
+    """
     usuario_nombre = serializers.CharField(source="usuario.get_full_name", read_only=True)
     duracion_minutos = serializers.IntegerField(read_only=True)
     
     class Meta:
         model = Pausa
         fields = "__all__"
+    
+    def validate(self, attrs):
+        """
+        Validaciones a nivel de objeto completo.
+        """
+        ot = attrs.get('ot') or (self.instance.ot if self.instance else None)
+        
+        if not ot:
+            raise serializers.ValidationError({"ot": "La OT es obligatoria."})
+        
+        # Si se está creando una pausa (no tiene fin), validar que la OT esté EN_EJECUCION
+        if not self.instance:  # Creación
+            if ot.estado != 'EN_EJECUCION':
+                raise serializers.ValidationError({
+                    'ot': "Solo se pueden crear pausas cuando la OT está en estado EN_EJECUCION."
+                })
+        
+        return attrs
 
 class ChecklistSerializer(serializers.ModelSerializer):
     class Meta:

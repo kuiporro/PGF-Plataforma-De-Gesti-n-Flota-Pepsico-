@@ -187,6 +187,89 @@ class OrdenTrabajo(models.Model):
     # Zona: zona o sucursal donde se realiza el trabajo
     zona = models.CharField(max_length=100, blank=True, help_text="Zona o sucursal")
     
+    # Site: sitio o ubicación operativa (importante para reportes)
+    site = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Site o ubicación operativa donde se realiza la OT"
+    )
+    
+    # Backup asignado (si existe)
+    backup = models.ForeignKey(
+        "vehicles.BackupVehiculo",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ots_backup",
+        help_text="Backup asignado durante esta OT"
+    )
+    
+    # Estado operativo del vehículo antes de la OT
+    estado_operativo_antes = models.CharField(
+        max_length=30,
+        blank=True,
+        help_text="Estado operativo del vehículo antes de la OT"
+    )
+    
+    # Estado operativo del vehículo después de la OT
+    estado_operativo_despues = models.CharField(
+        max_length=30,
+        blank=True,
+        help_text="Estado operativo del vehículo después de la OT"
+    )
+    
+    # Causa de ingreso (más detallada que motivo)
+    causa_ingreso = models.TextField(
+        blank=True,
+        help_text="Causa detallada de ingreso al taller"
+    )
+    
+    # Causa de salida
+    causa_salida = models.TextField(
+        blank=True,
+        help_text="Causa de salida del taller"
+    )
+    
+    # Tiempo en espera (en horas)
+    tiempo_espera = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Tiempo en espera antes de iniciar trabajo (horas)"
+    )
+    
+    # Tiempo en ejecución (en horas)
+    tiempo_ejecucion = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Tiempo total en ejecución (horas)"
+    )
+    
+    # Tiempo total de reparación (en días)
+    tiempo_total_reparacion = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Tiempo total de reparación (días)"
+    )
+    
+    # SLA vencido (True si excedió el tiempo límite)
+    sla_vencido = models.BooleanField(
+        default=False,
+        help_text="Indica si la OT excedió el tiempo límite (SLA)"
+    )
+    
+    # Fecha límite SLA
+    fecha_limite_sla = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Fecha límite para cumplir SLA"
+    )
+    
     # ==================== FECHAS ====================
     # Rastrean el ciclo de vida de la OT
     
@@ -584,10 +667,21 @@ class Evidencia(models.Model):
     class TipoEvidencia(models.TextChoices):
         """
         Tipos de evidencias disponibles.
+        
+        Soporta múltiples formatos:
+        - FOTO: Imágenes (JPEG, PNG, GIF, WebP, BMP)
+        - PDF: Documentos PDF
+        - HOJA_CALCULO: Hojas de cálculo (XLSX, XLS, CSV)
+        - DOCUMENTO: Documentos Word (DOC, DOCX)
+        - COMPRIMIDO: Archivos comprimidos (ZIP, RAR, 7Z)
+        - OTRO: Otros tipos de archivo
         """
         FOTO = "FOTO", "FOTO"  # Imagen fotográfica
         PDF = "PDF", "PDF"  # Documento PDF
-        OTRO = "OTRO", "OTRO"  # Otro tipo
+        HOJA_CALCULO = "HOJA_CALCULO", "HOJA_CALCULO"  # Hojas de cálculo (Excel, CSV)
+        DOCUMENTO = "DOCUMENTO", "DOCUMENTO"  # Documentos Word
+        COMPRIMIDO = "COMPRIMIDO", "COMPRIMIDO"  # Archivos comprimidos
+        OTRO = "OTRO", "OTRO"  # Otro tipo de archivo
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     
@@ -603,8 +697,9 @@ class Evidencia(models.Model):
     url = models.URLField()
     
     # Tipo de evidencia
+    # max_length aumentado a 15 para soportar "HOJA_CALCULO" (12 caracteres) y otros tipos
     tipo = models.CharField(
-        max_length=10, 
+        max_length=15, 
         choices=TipoEvidencia.choices, 
         default="FOTO"
     )

@@ -195,12 +195,20 @@ class MeAPIView(APIView):
 
     def get(self, request):
         """
-        Retorna información del usuario actual.
+        Retorna información del usuario actual incluyendo perfil con preferencias.
         
         Retorna:
-        - JSON con datos del usuario serializados
+        - JSON con datos del usuario serializados y perfil
         """
-        return Response(UserSerializer(request.user).data)
+        serializer = UserSerializer(request.user)
+        data = serializer.data
+        
+        # Incluir perfil con preferencias si existe
+        if hasattr(request.user, 'profile'):
+            profile_serializer = ProfileSerializer(request.user.profile)
+            data['profile'] = profile_serializer.data
+        
+        return Response(data)
     
 
 from rest_framework.views import APIView
@@ -264,6 +272,12 @@ class LoginView(APIView):
         # Obtener usuario validado del serializer
         # LoginSerializer.validate() ya verificó credenciales y que esté activo
         user = serializer.validated_data["user"]
+        
+        # Logging para debugging (solo en desarrollo)
+        import logging
+        logger = logging.getLogger(__name__)
+        if settings.DEBUG:
+            logger.info(f"Login exitoso para usuario: {user.username}, rol: {user.rol}, activo: {user.is_active}")
 
         # Generar tokens JWT
         # RefreshToken.for_user() crea un par de tokens (refresh + access)
@@ -274,17 +288,25 @@ class LoginView(APIView):
         # Esto permite rastrear quién y cuándo accedió al sistema
         from apps.workorders.models import Auditoria
         from django.utils import timezone
-        Auditoria.objects.create(
-            usuario=user,
-            accion="LOGIN_EXITOSO",
-            objeto_tipo="User",
-            objeto_id=str(user.id),
-            payload={
-                "ip": self.get_client_ip(request),  # IP del cliente
-                "user_agent": request.META.get('HTTP_USER_AGENT', ''),  # Navegador
-                "timestamp": timezone.now().isoformat()  # Fecha/hora
-            }
-        )
+        try:
+            Auditoria.objects.create(
+                usuario=user,
+                accion="LOGIN_EXITOSO",
+                objeto_tipo="User",
+                objeto_id=str(user.id),
+                payload={
+                    "ip": self.get_client_ip(request),  # IP del cliente
+                    "user_agent": request.META.get('HTTP_USER_AGENT', ''),  # Navegador
+                    "timestamp": timezone.now().isoformat(),  # Fecha/hora
+                    "rol": user.rol  # Agregar rol para debugging
+                }
+            )
+        except Exception as e:
+            # Si falla la auditoría, no bloquear el login
+            # Solo loguear el error para debugging
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error al registrar auditoría de login: {e}")
 
         # Preparar respuesta con datos del usuario y tokens
         res = Response({

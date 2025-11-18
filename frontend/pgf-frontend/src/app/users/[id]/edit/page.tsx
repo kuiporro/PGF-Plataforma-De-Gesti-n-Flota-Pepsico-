@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useToast } from "@/components/ToastContainer";
-import { validateRequired, validateEmail } from "@/lib/validations";
+import { validateRequired, validateEmail, validateMinLength } from "@/lib/validations";
 import RoleGuard from "@/components/RoleGuard";
 import { ALL_ROLES } from "@/lib/constants";
 
@@ -17,6 +17,8 @@ export default function EditUser() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showPasswordField, setShowPasswordField] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
 
   useEffect(() => {
     const load = async () => {
@@ -82,6 +84,12 @@ export default function EditUser() {
     const usernameError = validateRequired(form.username, "Usuario");
     if (usernameError) newErrors.username = usernameError;
 
+    // Validar contraseña solo si se está cambiando
+    if (showPasswordField && newPassword) {
+      const passwordError = validateMinLength(newPassword, 8, "Contraseña");
+      if (passwordError) newErrors.password = passwordError;
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -96,13 +104,21 @@ export default function EditUser() {
     setErrors({});
 
     try {
+      // Preparar datos para enviar
+      const dataToSend = { ...form };
+      
+      // Si se está cambiando la contraseña, incluirla en el payload
+      if (showPasswordField && newPassword) {
+        dataToSend.password = newPassword;
+      }
+
       const r = await fetch(`/api/proxy/users/${id}/`, {
-        method: "PUT",
+        method: "PATCH",
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify(dataToSend),
       });
 
       const text = await r.text();
@@ -203,6 +219,50 @@ export default function EditUser() {
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Campo de contraseña opcional para admin */}
+          <div className="border-t pt-4 mt-4">
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Cambiar Contraseña
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPasswordField(!showPasswordField);
+                  setNewPassword("");
+                  if (errors.password) {
+                    setErrors({ ...errors, password: "" });
+                  }
+                }}
+                className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                {showPasswordField ? "Cancelar cambio" : "Cambiar contraseña"}
+              </button>
+            </div>
+            {showPasswordField && (
+              <div>
+                <input
+                  type="password"
+                  placeholder="Nueva contraseña (mínimo 8 caracteres)"
+                  className={`input w-full ${errors.password ? "border-red-500" : ""}`}
+                  value={newPassword}
+                  onChange={(e) => {
+                    setNewPassword(e.target.value);
+                    if (errors.password) {
+                      setErrors({ ...errors, password: "" });
+                    }
+                  }}
+                />
+                {errors.password && (
+                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.password}</p>
+                )}
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Deja vacío si no deseas cambiar la contraseña. Mínimo 8 caracteres.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="flex gap-4 pt-4">

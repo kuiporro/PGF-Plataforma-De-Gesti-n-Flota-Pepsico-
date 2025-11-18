@@ -147,6 +147,42 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
     ordering_fields = ["id", "apertura", "cierre", "estado"]  # Campos ordenables
     search_fields = ["vehiculo__patente"]  # Búsqueda por patente
 
+    def create(self, request, *args, **kwargs):
+        """
+        Crea una nueva OT y envía notificaciones a usuarios relevantes.
+        
+        Sobrescribe el método create del ModelViewSet para agregar
+        lógica de notificaciones y registro de historial cuando se crea una nueva OT.
+        """
+        # Crear la OT usando el método del padre
+        response = super().create(request, *args, **kwargs)
+        
+        # Si la creación fue exitosa, crear notificaciones y registrar historial
+        if response.status_code == status.HTTP_201_CREATED:
+            ot = OrdenTrabajo.objects.get(id=response.data['id'])
+            
+            # Registrar en historial del vehículo
+            try:
+                from apps.vehicles.utils import registrar_ot_creada, calcular_sla_ot
+                registrar_ot_creada(ot, request.user)
+                calcular_sla_ot(ot)  # Calcular SLA automáticamente
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error al registrar historial para OT {ot.id}: {e}")
+            
+            # Crear notificaciones para usuarios relevantes
+            try:
+                from apps.notifications.utils import crear_notificacion_ot_creada
+                crear_notificacion_ot_creada(ot, request.user)
+            except Exception as e:
+                # Si falla la creación de notificaciones, no fallar la creación de OT
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error al crear notificaciones para OT {ot.id}: {e}")
+        
+        return response
+
     def perform_destroy(self, instance):
         """
         Eliminar OT de forma segura.
@@ -291,17 +327,19 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
         
         Requisitos:
         - La OT debe estar en EN_QA o CERRADA
+        - Debe incluir fecha_cierre, diagnostico_final y estado_final = CERRADA
         
         Proceso:
         1. Valida estado
-        2. Ejecuta transición a CERRADA
-        3. Genera PDF de cierre (tarea Celery asíncrona)
-        4. Registra auditoría
+        2. Valida campos obligatorios (fecha_cierre, diagnostico_final)
+        3. Ejecuta transición a CERRADA
+        4. Genera PDF de cierre (tarea Celery asíncrona)
+        5. Registra auditoría
         
         Retorna:
         - 200: {"estado": "CERRADA", "cierre": "2024-01-15T10:30:00Z"}
         - 403: Si no tiene permisos
-        - 400: Si el estado no permite cerrar
+        - 400: Si el estado no permite cerrar o faltan campos obligatorios
         """
         if request.user.rol not in ("SUPERVISOR", "ADMIN", "JEFE_TALLER"):
             return Response(
@@ -317,12 +355,54 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Validar campos obligatorios para el cierre
+        diagnostico_final = request.data.get('diagnostico_final') or request.data.get('diagnostico')
+        fecha_cierre = request.data.get('fecha_cierre') or request.data.get('cierre')
+        
+        if not diagnostico_final:
+            return Response(
+                {"detail": "El campo diagnostico_final es obligatorio para cerrar la OT."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not fecha_cierre:
+            return Response(
+                {"detail": "El campo fecha_cierre es obligatorio para cerrar la OT."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Actualizar diagnóstico y fecha de cierre
+        ot.diagnostico = diagnostico_final
+        if fecha_cierre:
+            from django.utils.dateparse import parse_datetime
+            fecha_parsed = parse_datetime(fecha_cierre)
+            if fecha_parsed:
+                ot.cierre = fecha_parsed
+            else:
+                return Response(
+                    {"detail": "El formato de fecha_cierre es inválido. Use formato ISO 8601."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
         # Ejecutar transición (actualiza estado y fecha de cierre)
         do_transition(ot, "CERRADA")
         
+        # Registrar en historial del vehículo y calcular tiempos
+        try:
+            from apps.vehicles.utils import registrar_ot_cerrada
+            registrar_ot_cerrada(ot, request.user)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error al registrar historial para OT {ot.id}: {e}")
+        
         # Generar PDF de cierre automáticamente (tarea asíncrona)
-        from .tasks import generar_pdf_cierre
-        generar_pdf_cierre.delay(str(ot.id), request.user.id)
+        try:
+            from .tasks import generar_pdf_cierre
+            generar_pdf_cierre.delay(str(ot.id), request.user.id)
+        except Exception:
+            # Si no existe la tarea, continuar sin error
+            pass
         
         # Registrar auditoría
         Auditoria.objects.create(
@@ -332,6 +412,15 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
             objeto_id=str(ot.id),
             payload={}
         )
+        
+        # Crear notificaciones
+        try:
+            from apps.notifications.utils import crear_notificacion_ot_cerrada
+            crear_notificacion_ot_cerrada(ot, request.user)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error al crear notificaciones para OT cerrada {ot.id}: {e}")
         
         return Response({"estado": ot.estado, "cierre": ot.cierre})
 
@@ -537,6 +626,15 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
             objeto_id=str(ot.id),
             payload={"mecanico_id": str(mecanico.id), "mecanico": mecanico.username}
         )
+        
+        # Crear notificaciones
+        try:
+            from apps.notifications.utils import crear_notificacion_ot_asignada
+            crear_notificacion_ot_asignada(ot, mecanico)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error al crear notificaciones para OT asignada {ot.id}: {e}")
         
         return Response({
             "estado": ot.estado,
@@ -1156,6 +1254,16 @@ class ChecklistViewSet(viewsets.ModelViewSet):
             payload={"ot_id": str(ot.id)}
         )
         
+        # Crear notificaciones (la OT fue cerrada y aprobada)
+        try:
+            from apps.notifications.utils import crear_notificacion_ot_cerrada, crear_notificacion_ot_aprobada
+            crear_notificacion_ot_cerrada(ot, request.user)
+            crear_notificacion_ot_aprobada(ot, request.user)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error al crear notificaciones para OT aprobada {ot.id}: {e}")
+        
         return Response({
             "checklist": ChecklistSerializer(checklist).data,
             "ot_estado": ot.estado,
@@ -1232,6 +1340,15 @@ class ChecklistViewSet(viewsets.ModelViewSet):
             }
         )
         
+        # Crear notificaciones
+        try:
+            from apps.notifications.utils import crear_notificacion_ot_rechazada
+            crear_notificacion_ot_rechazada(ot, request.user)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error al crear notificaciones para OT rechazada {ot.id}: {e}")
+        
         return Response({
             "checklist": ChecklistSerializer(checklist).data,
             "ot_estado": ot.estado,
@@ -1275,6 +1392,33 @@ class EvidenciaViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_fields = ["tipo", "ot"]
     ordering_fields = ["subido_en"]
+    
+    def create(self, request, *args, **kwargs):
+        """
+        Crea una nueva evidencia y envía notificaciones a usuarios relevantes.
+        
+        Sobrescribe el método create del ModelViewSet para agregar
+        lógica de notificaciones cuando se sube una evidencia importante.
+        """
+        # Crear la evidencia usando el método del padre
+        response = super().create(request, *args, **kwargs)
+        
+        # Si la creación fue exitosa, crear notificaciones
+        if response.status_code == status.HTTP_201_CREATED:
+            evidencia = Evidencia.objects.get(id=response.data['id'])
+            
+            # Crear notificaciones para usuarios relevantes
+            try:
+                from apps.notifications.utils import crear_notificacion_evidencia
+                crear_notificacion_evidencia(evidencia, request.user)
+            except Exception as e:
+                # Si falla la creación de notificaciones, no fallar la creación de evidencia
+                # Solo registrar el error
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error al crear notificaciones para evidencia {evidencia.id}: {e}")
+        
+        return response
 
     @extend_schema(request=EmptySerializer, responses={200: None})
     @action(detail=False, methods=['post'], url_path='presigned')
@@ -1349,7 +1493,8 @@ class EvidenciaViewSet(viewsets.ModelViewSet):
                 self.size = size
         
         file_mock = FileMock(filename, content_type, file_size)
-        validation = validate_file_upload(file_mock, max_size_mb=10)
+        # Límite aumentado a 3GB (3072 MB) para soportar archivos grandes
+        validation = validate_file_upload(file_mock, max_size_mb=3072)
         
         if not validation['valid']:
             return Response(
@@ -1369,11 +1514,18 @@ class EvidenciaViewSet(viewsets.ModelViewSet):
             "s3",
             region_name=region,
             endpoint_url=endpoint_url,  # LocalStack en desarrollo
-            config=Config(s3={"addressing_style": "path"})
+            config=Config(
+                s3={
+                    "addressing_style": "path",
+                    "multipart_threshold": 64 * 1024 * 1024,  # 64MB - usar multipart para archivos grandes
+                    "multipart_chunksize": 64 * 1024 * 1024,  # 64MB por chunk
+                    "max_bandwidth": None,  # Sin límite de ancho de banda
+                }
+            )
         )
 
-        # Límite de 10MB
-        max_size = 10 * 1024 * 1024
+        # Límite aumentado a 3GB (3072 MB) para soportar archivos grandes
+        max_size = 3072 * 1024 * 1024
         
         # Generar URL presigned para POST (subida directa)
         presigned = s3.generate_presigned_post(
@@ -1384,7 +1536,7 @@ class EvidenciaViewSet(viewsets.ModelViewSet):
                 {"Content-Type": content_type},
                 ["content-length-range", 0, max_size]  # Validar tamaño
             ],
-            ExpiresIn=60 * 5  # Expira en 5 minutos
+            ExpiresIn=60 * 60  # Expira en 1 hora (archivos grandes pueden tardar más en subir)
         )
 
         # Construir URL final del archivo

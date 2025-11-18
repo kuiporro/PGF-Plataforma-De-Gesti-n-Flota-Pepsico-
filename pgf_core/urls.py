@@ -74,6 +74,11 @@ urlpatterns = [
     # EMERGENCIES
     # ----------------------------
     path("api/v1/emergencies/", include("apps.emergencies.urls")),
+    
+    # ----------------------------
+    # NOTIFICATIONS
+    # ----------------------------
+    path("api/v1/", include("apps.notifications.urls")),
 ]
 
 if settings.DEBUG:

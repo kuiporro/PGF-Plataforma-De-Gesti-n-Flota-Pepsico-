@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/store/auth";
+import NotificationBell from "@/components/NotificationBell";
 
 export default function Topbar() {
   const [user, setUser] = useState<any>(null);
@@ -48,6 +49,9 @@ export default function Topbar() {
       </h1>
 
       <div className="flex items-center gap-4">
+        {/* Componente de notificaciones */}
+        {user && <NotificationBell />}
+        
         {user && (
           <div className="flex items-center gap-3">
             <div className="text-right">
@@ -65,12 +69,20 @@ export default function Topbar() {
         )}
 
         {user && (
-          <a
-            href="/profile/change-password"
-            className="px-3 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg transition-colors duration-200 text-sm font-medium"
-          >
-            Cambiar Contraseña
-          </a>
+          <>
+            <a
+              href="/profile/preferences"
+              className="px-3 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg transition-colors duration-200 text-sm font-medium"
+            >
+              Preferencias
+            </a>
+            <a
+              href="/profile/change-password"
+              className="px-3 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg transition-colors duration-200 text-sm font-medium"
+            >
+              Cambiar Contraseña
+            </a>
+          </>
         )}
 
         <button

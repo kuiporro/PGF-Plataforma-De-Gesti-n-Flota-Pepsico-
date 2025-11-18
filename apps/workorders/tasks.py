@@ -199,3 +199,6 @@ def generar_pdf_cierre(ot_id: str, user_id: int | None):
 @shared_task
 def ping_task():
     return "pong"
+
+# Importar tareas de colación para que Celery las descubra
+from . import tasks_colacion  # noqa

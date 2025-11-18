@@ -9,9 +9,12 @@ export async function GET() {
     return Response.json({ detail: "Unauthorized" }, { status: 401 });
 
   try {
-    const r = await fetch(`${ENDPOINTS.ME}`, {
+    // Usar el endpoint correcto: /api/v1/users/me/ (definido en UserViewSet.me)
+    const backend = process.env.NEXT_PUBLIC_API_BASE_URL || "http://pgf-api:8000";
+    const r = await fetch(`${backend}/api/v1/users/me/`, {
       headers: {
         Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
       },
     });
 

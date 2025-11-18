@@ -1,0 +1,1737 @@
+{
+	"info": {
+		"_postman_id": "pgf-api-collection",
+		"name": "PGF - Plataforma de Gestión de Flota",
+		"description": "Colección completa de endpoints para la API de PGF (PepsiCo)",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{access_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000",
+			"type": "string"
+		},
+		{
+			"key": "api_version",
+			"value": "api/v1",
+			"type": "string"
+		},
+		{
+			"key": "access_token",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "🔐 Autenticación",
+			"item": [
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const jsonData = pm.response.json();",
+									"    pm.collectionVariables.set('access_token', jsonData.access);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"admin\",\n    \"password\": \"password123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/auth/login/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "auth", "login", ""]
+						},
+						"description": "Iniciar sesión y obtener tokens JWT"
+					}
+				},
+				{
+					"name": "Refresh Token",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/auth/refresh/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "auth", "refresh", ""]
+						},
+						"description": "Refrescar token de acceso usando refresh token"
+					}
+				},
+				{
+					"name": "Me (Usuario Actual)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/users/me/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "users", "me", ""]
+						},
+						"description": "Obtener información del usuario autenticado"
+					}
+				},
+				{
+					"name": "Solicitar Reset de Contraseña",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"usuario@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/auth/password-reset/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "auth", "password-reset", ""]
+						},
+						"description": "Solicitar reset de contraseña por email"
+					}
+				},
+				{
+					"name": "Confirmar Reset de Contraseña",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"token\": \"token-del-email\",\n    \"new_password\": \"nuevaPassword123\",\n    \"confirm_password\": \"nuevaPassword123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/auth/password-reset/confirm/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "auth", "password-reset", "confirm", ""]
+						},
+						"description": "Confirmar reset de contraseña con token"
+					}
+				},
+				{
+					"name": "Cambiar Contraseña (Usuario)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"current_password\": \"passwordActual\",\n    \"new_password\": \"nuevaPassword123\",\n    \"confirm_password\": \"nuevaPassword123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/auth/change-password/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "auth", "change-password", ""]
+						},
+						"description": "Cambiar contraseña del usuario autenticado"
+					}
+				}
+			]
+		},
+		{
+			"name": "👥 Usuarios",
+			"item": [
+				{
+					"name": "Listar Usuarios",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/users/?page=1&page_size=20",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "users", ""],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "page_size",
+									"value": "20"
+								}
+							]
+						},
+						"description": "Listar todos los usuarios (paginado)"
+					}
+				},
+				{
+					"name": "Crear Usuario",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"nuevo_usuario\",\n    \"email\": \"usuario@example.com\",\n    \"password\": \"password123\",\n    \"first_name\": \"Nombre\",\n    \"last_name\": \"Apellido\",\n    \"rol\": \"MECANICO\",\n    \"rut\": \"123456789\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/users/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "users", ""]
+						},
+						"description": "Crear un nuevo usuario"
+					}
+				},
+				{
+					"name": "Obtener Usuario",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/users/:id/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "users", ":id", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "user-uuid-here"
+								}
+							]
+						},
+						"description": "Obtener detalles de un usuario específico"
+					}
+				},
+				{
+					"name": "Actualizar Usuario",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"first_name\": \"Nombre Actualizado\",\n    \"email\": \"nuevo@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/users/:id/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "users", ":id", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "user-uuid-here"
+								}
+							]
+						},
+						"description": "Actualizar información de un usuario"
+					}
+				},
+				{
+					"name": "Eliminar Usuario",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/users/:id/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "users", ":id", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "user-uuid-here"
+								}
+							]
+						},
+						"description": "Eliminar un usuario"
+					}
+				},
+				{
+					"name": "Cambiar Contraseña (Admin)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"new_password\": \"nuevaPassword123\",\n    \"confirm_password\": \"nuevaPassword123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/users/:user_id/change-password/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "users", ":user_id", "change-password", ""],
+							"variable": [
+								{
+									"key": "user_id",
+									"value": "user-uuid-here"
+								}
+							]
+						},
+						"description": "Admin cambia contraseña de otro usuario"
+					}
+				}
+			]
+		},
+		{
+			"name": "🚗 Vehículos",
+			"item": [
+				{
+					"name": "Listar Vehículos",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/vehicles/?page=1&page_size=20&estado=ACTIVO",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "vehicles", ""],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "page_size",
+									"value": "20"
+								},
+								{
+									"key": "estado",
+									"value": "ACTIVO"
+								}
+							]
+						},
+						"description": "Listar vehículos con filtros"
+					}
+				},
+				{
+					"name": "Crear Vehículo",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"patente\": \"ABC123\",\n    \"marca\": \"Toyota\",\n    \"modelo\": \"Hilux\",\n    \"anio\": 2020,\n    \"tipo\": \"DIESEL\",\n    \"categoria\": \"REPARTO\",\n    \"zona\": \"Zona Norte\",\n    \"sucursal\": \"Sucursal 1\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/vehicles/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "vehicles", ""]
+						},
+						"description": "Crear un nuevo vehículo"
+					}
+				},
+				{
+					"name": "Obtener Vehículo",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/vehicles/:id/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "vehicles", ":id", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "vehicle-uuid-here"
+								}
+							]
+						},
+						"description": "Obtener detalles de un vehículo"
+					}
+				},
+				{
+					"name": "Actualizar Vehículo",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"estado\": \"EN_MANTENIMIENTO\",\n    \"km_mensual_promedio\": 5000\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/vehicles/:id/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "vehicles", ":id", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "vehicle-uuid-here"
+								}
+							]
+						},
+						"description": "Actualizar información de un vehículo"
+					}
+				},
+				{
+					"name": "Eliminar Vehículo",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/vehicles/:id/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "vehicles", ":id", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "vehicle-uuid-here"
+								}
+							]
+						},
+						"description": "Eliminar un vehículo"
+					}
+				},
+				{
+					"name": "Registrar Ingreso (Guardia)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"patente\": \"ABC123\",\n    \"observaciones\": \"Vehículo con daños\",\n    \"kilometraje\": 50000,\n    \"motivo\": \"Reparación urgente\",\n    \"prioridad\": \"ALTA\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/vehicles/ingreso/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "vehicles", "ingreso", ""]
+						},
+						"description": "Registrar ingreso rápido de vehículo al taller"
+					}
+				},
+				{
+					"name": "Agregar Evidencia de Ingreso",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"url\": \"https://s3.amazonaws.com/bucket/evidencia.jpg\",\n    \"tipo\": \"FOTO_INGRESO\",\n    \"descripcion\": \"Foto del vehículo al ingreso\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/vehicles/:id/ingreso/evidencias/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "vehicles", ":id", "ingreso", "evidencias", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "vehicle-uuid-here"
+								}
+							]
+						},
+						"description": "Agregar evidencia fotográfica al ingreso"
+					}
+				},
+				{
+					"name": "Historial del Vehículo",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/vehicles/:id/historial/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "vehicles", ":id", "historial", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "vehicle-uuid-here"
+								}
+							]
+						},
+						"description": "Obtener historial completo del vehículo (OT, repuestos, ingresos)"
+					}
+				}
+			]
+		},
+		{
+			"name": "🔧 Órdenes de Trabajo",
+			"item": [
+				{
+					"name": "Listar OT",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/ordenes/?page=1&page_size=20&estado=ABIERTA",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "ordenes", ""],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "page_size",
+									"value": "20"
+								},
+								{
+									"key": "estado",
+									"value": "ABIERTA"
+								}
+							]
+						},
+						"description": "Listar órdenes de trabajo con filtros"
+					}
+				},
+				{
+					"name": "Crear OT",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"vehiculo\": \"vehicle-uuid-here\",\n    \"tipo\": \"MANTENCION\",\n    \"prioridad\": \"MEDIA\",\n    \"motivo\": \"Mantención preventiva\",\n    \"zona\": \"Zona Norte\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/ordenes/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "ordenes", ""]
+						},
+						"description": "Crear una nueva orden de trabajo"
+					}
+				},
+				{
+					"name": "Obtener OT",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/ordenes/:id/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "ordenes", ":id", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "ot-uuid-here"
+								}
+							]
+						},
+						"description": "Obtener detalles de una OT"
+					}
+				},
+				{
+					"name": "Actualizar OT",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"prioridad\": \"ALTA\",\n    \"motivo\": \"Motivo actualizado\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/ordenes/:id/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "ordenes", ":id", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "ot-uuid-here"
+								}
+							]
+						},
+						"description": "Actualizar una OT"
+					}
+				},
+				{
+					"name": "Eliminar OT",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/ordenes/:id/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "ordenes", ":id", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "ot-uuid-here"
+								}
+							]
+						},
+						"description": "Eliminar una OT"
+					}
+				},
+				{
+					"name": "Diagnóstico (Jefe Taller)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"diagnostico\": \"Se requiere cambio de aceite y filtros\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/ordenes/:id/diagnostico/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "ordenes", ":id", "diagnostico", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "ot-uuid-here"
+								}
+							]
+						},
+						"description": "Realizar diagnóstico de la OT"
+					}
+				},
+				{
+					"name": "Aprobar Asignación (Supervisor)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"mecanico_id\": \"mecanico-uuid-here\",\n    \"prioridad\": \"ALTA\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/ordenes/:id/aprobar-asignacion/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "ordenes", ":id", "aprobar-asignacion", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "ot-uuid-here"
+								}
+							]
+						},
+						"description": "Aprobar asignación de mecánico"
+					}
+				},
+				{
+					"name": "En Ejecución",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/ordenes/:id/en-ejecucion/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "ordenes", ":id", "en-ejecucion", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "ot-uuid-here"
+								}
+							]
+						},
+						"description": "Cambiar estado a EN_EJECUCION"
+					}
+				},
+				{
+					"name": "En Pausa",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/ordenes/:id/en-pausa/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "ordenes", ":id", "en-pausa", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "ot-uuid-here"
+								}
+							]
+						},
+						"description": "Cambiar estado a EN_PAUSA"
+					}
+				},
+				{
+					"name": "En QA",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/ordenes/:id/en-qa/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "ordenes", ":id", "en-qa", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "ot-uuid-here"
+								}
+							]
+						},
+						"description": "Cambiar estado a EN_QA"
+					}
+				},
+				{
+					"name": "Cerrar OT",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/ordenes/:id/cerrar/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "ordenes", ":id", "cerrar", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "ot-uuid-here"
+								}
+							]
+						},
+						"description": "Cerrar la OT (genera PDF automático)"
+					}
+				},
+				{
+					"name": "Anular OT",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/ordenes/:id/anular/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "ordenes", ":id", "anular", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "ot-uuid-here"
+								}
+							]
+						},
+						"description": "Anular la OT"
+					}
+				},
+				{
+					"name": "Retrabajo",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"motivo\": \"Requiere corrección\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/ordenes/:id/retrabajo/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "ordenes", ":id", "retrabajo", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "ot-uuid-here"
+								}
+							]
+						},
+						"description": "Marcar OT como retrabajo"
+					}
+				}
+			]
+		},
+		{
+			"name": "📋 Items OT",
+			"item": [
+				{
+					"name": "Listar Items",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/items/?ot=ot-uuid-here",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "items", ""],
+							"query": [
+								{
+									"key": "ot",
+									"value": "ot-uuid-here"
+								}
+							]
+						},
+						"description": "Listar items de una OT"
+					}
+				},
+				{
+					"name": "Crear Item",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"ot\": \"ot-uuid-here\",\n    \"tipo\": \"REPUESTO\",\n    \"descripcion\": \"Filtro de aceite\",\n    \"cantidad\": 2,\n    \"costo_unitario\": 15000\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/items/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "items", ""]
+						},
+						"description": "Crear un item en una OT"
+					}
+				},
+				{
+					"name": "Actualizar Item",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"cantidad\": 3,\n    \"costo_unitario\": 18000\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/items/:id/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "items", ":id", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "item-uuid-here"
+								}
+							]
+						},
+						"description": "Actualizar un item"
+					}
+				},
+				{
+					"name": "Eliminar Item",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/items/:id/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "items", ":id", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "item-uuid-here"
+								}
+							]
+						},
+						"description": "Eliminar un item"
+					}
+				}
+			]
+		},
+		{
+			"name": "💰 Presupuestos",
+			"item": [
+				{
+					"name": "Listar Presupuestos",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/presupuestos/?ot=ot-uuid-here",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "presupuestos", ""],
+							"query": [
+								{
+									"key": "ot",
+									"value": "ot-uuid-here"
+								}
+							]
+						},
+						"description": "Listar presupuestos"
+					}
+				},
+				{
+					"name": "Crear Presupuesto",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"ot\": \"ot-uuid-here\",\n    \"detalles_data\": [\n        {\n            \"concepto\": \"Repuestos\",\n            \"cantidad\": 2,\n            \"precio\": 50000\n        },\n        {\n            \"concepto\": \"Mano de obra\",\n            \"cantidad\": 4,\n            \"precio\": 25000\n        }\n    ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/presupuestos/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "presupuestos", ""]
+						},
+						"description": "Crear presupuesto con detalles"
+					}
+				},
+				{
+					"name": "Aprobar Presupuesto (Sponsor)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/aprobaciones/:id/aprobar/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "aprobaciones", ":id", "aprobar", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "aprobacion-uuid-here"
+								}
+							]
+						},
+						"description": "Aprobar un presupuesto"
+					}
+				},
+				{
+					"name": "Rechazar Presupuesto (Sponsor)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/aprobaciones/:id/rechazar/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "aprobaciones", ":id", "rechazar", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "aprobacion-uuid-here"
+								}
+							]
+						},
+						"description": "Rechazar un presupuesto"
+					}
+				}
+			]
+		},
+		{
+			"name": "⏸️ Pausas",
+			"item": [
+				{
+					"name": "Listar Pausas",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/pausas/?ot=ot-uuid-here",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "pausas", ""],
+							"query": [
+								{
+									"key": "ot",
+									"value": "ot-uuid-here"
+								}
+							]
+						},
+						"description": "Listar pausas de una OT"
+					}
+				},
+				{
+					"name": "Crear Pausa",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"ot\": \"ot-uuid-here\",\n    \"tipo\": \"ESPERA_REPUESTO\",\n    \"motivo\": \"Esperando repuesto del proveedor\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/pausas/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "pausas", ""]
+						},
+						"description": "Crear una pausa (colación automática si es horario)"
+					}
+				},
+				{
+					"name": "Reanudar Pausa",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/pausas/:id/reanudar/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "pausas", ":id", "reanudar", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "pausa-uuid-here"
+								}
+							]
+						},
+						"description": "Reanudar una pausa"
+					}
+				}
+			]
+		},
+		{
+			"name": "✅ Checklists QA",
+			"item": [
+				{
+					"name": "Listar Checklists",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/checklists/?ot=ot-uuid-here",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "checklists", ""],
+							"query": [
+								{
+									"key": "ot",
+									"value": "ot-uuid-here"
+								}
+							]
+						},
+						"description": "Listar checklists de una OT"
+					}
+				},
+				{
+					"name": "Crear Checklist",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"ot\": \"ot-uuid-here\",\n    \"resultado\": \"OK\",\n    \"observaciones\": \"Todo correcto\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/checklists/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "checklists", ""]
+						},
+						"description": "Crear un checklist de QA"
+					}
+				},
+				{
+					"name": "Aprobar QA",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"observaciones\": \"QA aprobada\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/checklists/:id/aprobar-qa/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "checklists", ":id", "aprobar-qa", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "checklist-uuid-here"
+								}
+							]
+						},
+						"description": "Aprobar QA (cierra la OT)"
+					}
+				},
+				{
+					"name": "Rechazar QA",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"observaciones\": \"Requiere corrección\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/checklists/:id/rechazar-qa/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "checklists", ":id", "rechazar-qa", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "checklist-uuid-here"
+								}
+							]
+						},
+						"description": "Rechazar QA (devuelve OT a EN_EJECUCION)"
+					}
+				}
+			]
+		},
+		{
+			"name": "📸 Evidencias",
+			"item": [
+				{
+					"name": "Listar Evidencias",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/evidencias/?ot=ot-uuid-here",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "evidencias", ""],
+							"query": [
+								{
+									"key": "ot",
+									"value": "ot-uuid-here"
+								}
+							]
+						},
+						"description": "Listar evidencias de una OT"
+					}
+				},
+				{
+					"name": "Obtener URL Pre-firmada (S3)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"ot\": \"ot-uuid-here\",\n    \"filename\": \"evidencia.jpg\",\n    \"content_type\": \"image/jpeg\",\n    \"file_size\": 1048576\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/evidencias/presigned/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "evidencias", "presigned", ""]
+						},
+						"description": "Obtener URL pre-firmada para subir archivo a S3"
+					}
+				},
+				{
+					"name": "Crear Evidencia",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"ot\": \"ot-uuid-here\",\n    \"url\": \"https://s3.amazonaws.com/bucket/evidencia.jpg\",\n    \"tipo\": \"FOTO\",\n    \"descripcion\": \"Foto del trabajo realizado\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/evidencias/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "evidencias", ""]
+						},
+						"description": "Registrar evidencia después de subir a S3"
+					}
+				},
+				{
+					"name": "Eliminar Evidencia",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/work/evidencias/:id/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "work", "evidencias", ":id", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "evidencia-uuid-here"
+								}
+							]
+						},
+						"description": "Eliminar una evidencia"
+					}
+				}
+			]
+		},
+		{
+			"name": "👨‍✈️ Choferes",
+			"item": [
+				{
+					"name": "Listar Choferes",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/drivers/choferes/?page=1&page_size=20",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "drivers", "choferes", ""],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "page_size",
+									"value": "20"
+								}
+							]
+						},
+						"description": "Listar choferes"
+					}
+				},
+				{
+					"name": "Crear Chofer",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"nombre_completo\": \"Juan Pérez\",\n    \"rut\": \"123456789\",\n    \"telefono\": \"+56912345678\",\n    \"email\": \"juan@example.com\",\n    \"zona\": \"Zona Norte\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/drivers/choferes/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "drivers", "choferes", ""]
+						},
+						"description": "Crear un nuevo chofer"
+					}
+				},
+				{
+					"name": "Asignar Vehículo",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"vehiculo_id\": \"vehicle-uuid-here\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/drivers/choferes/:id/asignar-vehiculo/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "drivers", "choferes", ":id", "asignar-vehiculo", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "chofer-uuid-here"
+								}
+							]
+						},
+						"description": "Asignar vehículo a un chofer"
+					}
+				},
+				{
+					"name": "Historial del Chofer",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/drivers/choferes/:id/historial/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "drivers", "choferes", ":id", "historial", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "chofer-uuid-here"
+								}
+							]
+						},
+						"description": "Obtener historial de asignaciones del chofer"
+					}
+				}
+			]
+		},
+		{
+			"name": "📅 Agenda",
+			"item": [
+				{
+					"name": "Listar Agendas",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/scheduling/agendas/?page=1&page_size=20",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "scheduling", "agendas", ""],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "page_size",
+									"value": "20"
+								}
+							]
+						},
+						"description": "Listar agendas programadas"
+					}
+				},
+				{
+					"name": "Crear Agenda",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"vehiculo\": \"vehicle-uuid-here\",\n    \"coordinador\": \"coordinador-uuid-here\",\n    \"fecha_programada\": \"2025-11-20T10:00:00Z\",\n    \"motivo\": \"Mantención preventiva\",\n    \"tipo_mantenimiento\": \"PREVENTIVO\",\n    \"zona\": \"Zona Norte\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/scheduling/agendas/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "scheduling", "agendas", ""]
+						},
+						"description": "Crear una nueva agenda"
+					}
+				},
+				{
+					"name": "Reprogramar Agenda",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"fecha_programada\": \"2025-11-25T10:00:00Z\",\n    \"motivo\": \"Reprogramado por urgencia\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/scheduling/agendas/:id/reprogramar/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "scheduling", "agendas", ":id", "reprogramar", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "agenda-uuid-here"
+								}
+							]
+						},
+						"description": "Reprogramar una agenda"
+					}
+				},
+				{
+					"name": "Cancelar Agenda",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/scheduling/agendas/:id/cancelar/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "scheduling", "agendas", ":id", "cancelar", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "agenda-uuid-here"
+								}
+							]
+						},
+						"description": "Cancelar una agenda"
+					}
+				},
+				{
+					"name": "Disponibilidad",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/scheduling/agendas/disponibilidad/?fecha=2025-11-20",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "scheduling", "agendas", "disponibilidad", ""],
+							"query": [
+								{
+									"key": "fecha",
+									"value": "2025-11-20"
+								}
+							]
+						},
+						"description": "Ver disponibilidad de cupos para una fecha"
+					}
+				}
+			]
+		},
+		{
+			"name": "🚨 Emergencias",
+			"item": [
+				{
+					"name": "Listar Emergencias",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/emergencies/?page=1&page_size=20&estado=PENDIENTE",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "emergencies", ""],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "page_size",
+									"value": "20"
+								},
+								{
+									"key": "estado",
+									"value": "PENDIENTE"
+								}
+							]
+						},
+						"description": "Listar emergencias"
+					}
+				},
+				{
+					"name": "Crear Emergencia",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"vehiculo\": \"vehicle-uuid-here\",\n    \"descripcion\": \"Avería en ruta\",\n    \"ubicacion\": \"Ruta 5, km 120\",\n    \"zona\": \"Zona Norte\",\n    \"prioridad\": \"CRITICA\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/emergencies/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "emergencies", ""]
+						},
+						"description": "Crear una nueva emergencia"
+					}
+				},
+				{
+					"name": "Aprobar Emergencia",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/emergencies/:id/aprobar/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "emergencies", ":id", "aprobar", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "emergencia-uuid-here"
+								}
+							]
+						},
+						"description": "Aprobar una emergencia"
+					}
+				},
+				{
+					"name": "Asignar Supervisor",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"supervisor_id\": \"supervisor-uuid-here\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/emergencies/:id/asignar-supervisor/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "emergencies", ":id", "asignar-supervisor", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "emergencia-uuid-here"
+								}
+							]
+						},
+						"description": "Asignar supervisor a emergencia"
+					}
+				},
+				{
+					"name": "Asignar Mecánico",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"mecanico_id\": \"mecanico-uuid-here\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/emergencies/:id/asignar-mecanico/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "emergencies", ":id", "asignar-mecanico", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "emergencia-uuid-here"
+								}
+							]
+						},
+						"description": "Asignar mecánico a emergencia"
+					}
+				},
+				{
+					"name": "Resolver Emergencia",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/emergencies/:id/resolver/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "emergencies", ":id", "resolver", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "emergencia-uuid-here"
+								}
+							]
+						},
+						"description": "Marcar emergencia como resuelta"
+					}
+				},
+				{
+					"name": "Cerrar Emergencia",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/emergencies/:id/cerrar/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "emergencies", ":id", "cerrar", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "emergencia-uuid-here"
+								}
+							]
+						},
+						"description": "Cerrar una emergencia"
+					}
+				},
+				{
+					"name": "Rechazar Emergencia",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"motivo\": \"No es una emergencia real\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/emergencies/:id/rechazar/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "emergencies", ":id", "rechazar", ""],
+							"variable": [
+								{
+									"key": "id",
+									"value": "emergencia-uuid-here"
+								}
+							]
+						},
+						"description": "Rechazar una emergencia"
+					}
+				}
+			]
+		},
+		{
+			"name": "📊 Reportes",
+			"item": [
+				{
+					"name": "Dashboard Ejecutivo",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/reports/dashboard-ejecutivo/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "reports", "dashboard-ejecutivo", ""]
+						},
+						"description": "Obtener datos del dashboard ejecutivo (KPIs)"
+					}
+				},
+				{
+					"name": "Reporte Productividad",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/reports/productividad/?fecha_inicio=2025-11-01&fecha_fin=2025-11-30",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "reports", "productividad", ""],
+							"query": [
+								{
+									"key": "fecha_inicio",
+									"value": "2025-11-01"
+								},
+								{
+									"key": "fecha_fin",
+									"value": "2025-11-30"
+								}
+							]
+						},
+						"description": "Reporte de productividad por período"
+					}
+				},
+				{
+					"name": "Reporte Pausas",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/reports/pausas/?fecha_inicio=2025-11-01&fecha_fin=2025-11-30",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "reports", "pausas", ""],
+							"query": [
+								{
+									"key": "fecha_inicio",
+									"value": "2025-11-01"
+								},
+								{
+									"key": "fecha_fin",
+									"value": "2025-11-30"
+								}
+							]
+						},
+						"description": "Reporte de pausas por período"
+					}
+				},
+				{
+					"name": "Generar PDF",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"tipo\": \"cierre_ot\",\n    \"ot_id\": \"ot-uuid-here\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{api_version}}/reports/pdf/",
+							"host": ["{{base_url}}"],
+							"path": ["{{api_version}}", "reports", "pdf", ""]
+						},
+						"description": "Generar PDF de reporte"
+					}
+				}
+			]
+		}
+	]
+}
+

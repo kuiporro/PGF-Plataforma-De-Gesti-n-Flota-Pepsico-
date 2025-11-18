@@ -55,10 +55,56 @@ export default function DashboardEjecutivo() {
     return <div className="p-6">No hay datos disponibles</div>;
   }
 
+  const downloadDailyReport = async () => {
+    const hoy = new Date().toISOString().split('T')[0];
+    setLoading(true);
+    
+    try {
+      const r = await fetch(`/api/proxy/reports/pdf/?tipo=diario&fecha_inicio=${hoy}`, {
+        credentials: "include",
+      });
+
+      if (!r.ok) {
+        const error = await r.json().catch(() => ({ detail: "Error al generar reporte" }));
+        toast.error(error.detail || "Error al generar reporte");
+        return;
+      }
+
+      // Descargar PDF
+      const blob = await r.blob();
+      const urlBlob = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = urlBlob;
+      a.download = `reporte_diario_${hoy}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(urlBlob);
+
+      toast.success("Reporte diario descargado correctamente");
+    } catch (error) {
+      console.error("Error:", error);
+      toast.error("Error al descargar reporte");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <RoleGuard allow={["EJECUTIVO", "ADMIN", "SPONSOR"]}>
+    <RoleGuard allow={["EJECUTIVO", "ADMIN", "SPONSOR", "JEFE_TALLER"]}>
       <div className="p-6 space-y-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Dashboard Ejecutivo</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Dashboard Ejecutivo</h1>
+          {/* Botón de reporte diario para ADMIN, SPONSOR, JEFE_TALLER */}
+          <button
+            onClick={downloadDailyReport}
+            disabled={loading}
+            className="px-6 py-3 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+            style={{ backgroundColor: '#003DA5' }}
+          >
+            {loading ? "Generando..." : "📊 Reporte Diario"}
+          </button>
+        </div>
 
         {/* KPIs principales */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

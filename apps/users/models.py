@@ -109,6 +109,20 @@ class Profile(models.Model):
     
     # Teléfono: información de contacto adicional
     phone_number = models.CharField(max_length=32, blank=True)
+    
+    # Preferencias de notificaciones
+    notificaciones_email = models.BooleanField(
+        default=True,
+        help_text="Recibir notificaciones por email"
+    )
+    notificaciones_sonido = models.BooleanField(
+        default=True,
+        help_text="Reproducir sonido al recibir notificaciones"
+    )
+    notificaciones_push = models.BooleanField(
+        default=False,
+        help_text="Recibir notificaciones push del navegador"
+    )
 
     def __str__(self):
         """

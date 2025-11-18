@@ -59,9 +59,19 @@ async function handler(req: NextRequest, ctx: any) {
 
   const text = await backend.text();
 
+  // Si el status es 204 (No Content), retornar sin body
+  if (backend.status === 204) {
+    return new NextResponse(null, { status: 204 });
+  }
+
   // si backend devolvió HTML → NO parsear
   if (text.startsWith("<")) {
     return new NextResponse(text, { status: backend.status });
+  }
+
+  // Si no hay contenido, retornar respuesta vacía
+  if (!text || text.trim() === "") {
+    return new NextResponse(null, { status: backend.status });
   }
 
   try {

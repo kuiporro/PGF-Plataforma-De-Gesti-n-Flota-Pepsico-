@@ -18,6 +18,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "channels",  # Django Channels para WebSockets
     "rest_framework",
     "rest_framework_simplejwt",
     "drf_spectacular",
@@ -31,6 +32,7 @@ INSTALLED_APPS = [
     "apps.drivers",
     "apps.scheduling",
     "apps.emergencies",
+    "apps.notifications",
 ]
 
 AUTH_USER_MODEL = "users.User"
@@ -153,6 +155,15 @@ CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOW_HEADERS = ["*"]
 CORS_ALLOW_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 
+# -------- Channels (WebSockets) --------
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [(os.getenv("REDIS_HOST", "redis"), int(os.getenv("REDIS_PORT", "6379")))],
+        },
+    },
+}
 
 # -------- AWS S3 --------
 

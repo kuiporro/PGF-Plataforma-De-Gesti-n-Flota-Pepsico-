@@ -6,6 +6,8 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "pgf_core.settings")
 
 celery_app = Celery("pgf")
 celery_app.config_from_object("django.conf:settings", namespace="CELERY")
+
+# Autodiscover tasks - busca tasks.py en todas las apps
 celery_app.autodiscover_tasks()
 
 
