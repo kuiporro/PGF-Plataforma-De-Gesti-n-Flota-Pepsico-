@@ -321,13 +321,41 @@ La documentación interactiva está disponible en:
 ### Ejecutar Tests
 
 ```bash
-# Backend
+# Todas las pruebas
 docker-compose exec api poetry run pytest
 
-# Frontend
-cd frontend/pgf-frontend
-npm test
+# Pruebas con cobertura
+docker-compose exec api poetry run pytest --cov=apps --cov-report=html
+
+# Pruebas específicas
+docker-compose exec api poetry run pytest apps/core/tests/test_validators.py -v
+
+# Generar reportes detallados por módulo
+docker-compose exec api poetry run python scripts/run_tests_with_reports.py
 ```
+
+### Estructura de Tests
+
+El proyecto incluye un sistema completo de pruebas:
+
+- **Validadores** (`apps/core/tests/`): Pruebas de validadores reutilizables
+- **Modelos** (`apps/*/tests/test_models.py`): Pruebas de modelos
+- **Serializers** (`apps/*/tests/test_serializers.py`): Pruebas de serializers con validaciones
+- **Views** (`apps/*/tests/test_views.py`): Pruebas de API endpoints
+
+### Reportes de Pruebas
+
+El script `scripts/run_tests_with_reports.py` genera reportes detallados por módulo:
+
+- **HTML**: Reportes visuales con resultados detallados
+- **JSON**: Datos estructurados para análisis
+- **TXT**: Logs completos de ejecución
+- **JUnit XML**: Compatible con CI/CD
+- **Cobertura**: Reportes de cobertura de código
+
+Los reportes se guardan en `test-results/reports/` organizados por módulo.
+
+Ver [scripts/README.md](./scripts/README.md) para más detalles.
 
 ## 📝 Migraciones
 
