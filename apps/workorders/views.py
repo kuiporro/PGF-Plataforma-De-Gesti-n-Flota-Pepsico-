@@ -1,24 +1,54 @@
 # apps/workorders/views.py
-import os
-import uuid
-import mimetypes
-from decimal import Decimal
+"""
+Vistas y ViewSets para gestión de Órdenes de Trabajo.
 
-import boto3
-from botocore.config import Config
+Este módulo define todos los endpoints de la API relacionados con:
+- Órdenes de Trabajo (OT): CRUD y transiciones de estado
+- Items de OT: Repuestos y servicios
+- Presupuestos: Gestión de presupuestos y aprobaciones
+- Pausas: Gestión de pausas durante ejecución (incluye colación automática)
+- Checklists: Control de calidad (QA)
+- Evidencias: Subida de fotos/documentos a S3
 
-from django.db import transaction
+Relaciones:
+- Usa: apps/workorders/models.py (todos los modelos)
+- Usa: apps/workorders/serializers.py (serializers para validación)
+- Usa: apps/workorders/services.py (transiciones de estado)
+- Usa: apps/workorders/permissions.py (WorkOrderPermission)
+- Usa: apps/workorders/filters.py (OrdenTrabajoFilter)
+- Conectado a: apps/workorders/urls.py
+
+Endpoints principales:
+- /api/v1/work/ordenes/ → CRUD de OT
+- /api/v1/work/ordenes/{id}/diagnostico/ → Diagnóstico por Jefe de Taller
+- /api/v1/work/ordenes/{id}/aprobar-asignacion/ → Aprobación de asignación
+- /api/v1/work/items/ → CRUD de items
+- /api/v1/work/presupuestos/ → CRUD de presupuestos
+- /api/v1/work/pausas/ → CRUD de pausas
+- /api/v1/work/checklists/ → CRUD de checklists
+- /api/v1/work/evidencias/ → CRUD de evidencias
+"""
+
+import os  # Para variables de entorno
+import uuid  # Para generar IDs únicos
+import mimetypes  # Para detectar tipos MIME de archivos
+from decimal import Decimal  # Para cálculos precisos de dinero
+
+import boto3  # Cliente AWS S3
+from botocore.config import Config  # Configuración de boto3
+
+from django.db import transaction  # Para transacciones atómicas
+from django.utils import timezone  # Para timestamps
 
 from rest_framework import viewsets, status, permissions
 from rest_framework.response import Response
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.views import APIView  # ✅ IMPORT CRÍTICO PARA PingView
+from rest_framework.views import APIView
 
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import OrderingFilter, SearchFilter
 
-from drf_spectacular.utils import extend_schema
-
+from drf_spectacular.utils import extend_schema  # Para documentación OpenAPI
 
 from apps.core.serializers import EmptySerializer
 from .filters import OrdenTrabajoFilter
@@ -35,14 +65,30 @@ from .serializers import (
     PresupuestoSerializer, DetallePresupSerializer,
     AprobacionSerializer, PausaSerializer,
     ChecklistSerializer, EvidenciaSerializer
-
 )
 
 
 class PingView(APIView):
+    """
+    Vista simple para verificar que el servidor está funcionando.
+    
+    Endpoint: POST /api/v1/work/ping/
+    
+    Permisos:
+    - Requiere autenticación (IsAuthenticated)
+    
+    Uso:
+    - Healthcheck del sistema
+    - Verificar que el token JWT es válido
+    - Testing de conectividad
+    
+    Retorna:
+    - 200: {"ok": True} si el servidor está funcionando
+    - 401: Si no hay token o es inválido
+    """
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = EmptySerializer
-    http_method_names = ["post"]  # explícito y claro
+    http_method_names = ["post"]  # Solo acepta POST
 
     @extend_schema(
         request=EmptySerializer,
@@ -50,20 +96,76 @@ class PingView(APIView):
         description="Ping de salud autenticado"
     )
     def post(self, request, *args, **kwargs):
+        """
+        Retorna OK si el servidor está funcionando y el usuario está autenticado.
+        
+        Parámetros:
+        - request: HttpRequest con usuario autenticado
+        
+        Retorna:
+        - Response con {"ok": True}
+        """
         return Response({"ok": True})
+
 
 # ============== ORDENES DE TRABAJO =================
 class OrdenTrabajoViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet principal para gestión de Órdenes de Trabajo.
+    
+    Proporciona endpoints CRUD completos y acciones personalizadas:
+    - GET /api/v1/work/ordenes/ → Listar OT
+    - POST /api/v1/work/ordenes/ → Crear OT
+    - GET /api/v1/work/ordenes/{id}/ → Ver OT
+    - PUT/PATCH /api/v1/work/ordenes/{id}/ → Editar OT
+    - DELETE /api/v1/work/ordenes/{id}/ → Eliminar OT
+    
+    Acciones personalizadas:
+    - POST /api/v1/work/ordenes/{id}/en-ejecucion/ → Cambiar a EN_EJECUCION
+    - POST /api/v1/work/ordenes/{id}/en-qa/ → Cambiar a EN_QA
+    - POST /api/v1/work/ordenes/{id}/en-pausa/ → Cambiar a EN_PAUSA
+    - POST /api/v1/work/ordenes/{id}/cerrar/ → Cerrar OT
+    - POST /api/v1/work/ordenes/{id}/anular/ → Anular OT
+    - POST /api/v1/work/ordenes/{id}/diagnostico/ → Realizar diagnóstico
+    - POST /api/v1/work/ordenes/{id}/aprobar-asignacion/ → Aprobar asignación
+    - POST /api/v1/work/ordenes/{id}/retrabajo/ → Marcar como retrabajo
+    
+    Permisos:
+    - Usa WorkOrderPermission (permisos personalizados por rol)
+    
+    Filtros:
+    - Por estado, vehículo, supervisor, mecánico, etc.
+    - Búsqueda por patente de vehículo
+    - Ordenamiento por fecha, estado, etc.
+    """
+    # QuerySet base con optimización (select_related reduce queries)
     queryset = OrdenTrabajo.objects.select_related("vehiculo", "responsable").all().order_by("-apertura")
     serializer_class = OrdenTrabajoSerializer
 
-    # filtros
+    # Configuración de filtros
     filter_backends = [DjangoFilterBackend, OrderingFilter, SearchFilter]
-    ordering_fields = ["id", "apertura", "cierre", "estado"]  
-    search_fields = ["vehiculo__patente"]
+    ordering_fields = ["id", "apertura", "cierre", "estado"]  # Campos ordenables
+    search_fields = ["vehiculo__patente"]  # Búsqueda por patente
 
     def perform_destroy(self, instance):
-        """Eliminar OT sin intentar eliminar relaciones de inventory que pueden no existir"""
+        """
+        Eliminar OT de forma segura.
+        
+        Este método se ejecuta antes de eliminar una OT.
+        Limpia relaciones con módulos que pueden no estar migrados
+        (inventory) para evitar errores de ForeignKey.
+        
+        Parámetros:
+        - instance: Instancia de OrdenTrabajo a eliminar
+        
+        Proceso:
+        1. Intenta eliminar SolicitudRepuesto relacionadas (si existe la tabla)
+        2. Intenta limpiar MovimientoStock relacionados (si existe la tabla)
+        3. Elimina la OT (esto elimina automáticamente items, pausas, evidencias, etc.)
+        
+        Nota: Usa try/except para que si las tablas no existen,
+        la eliminación continúe sin errores.
+        """
         try:
             # Intentar eliminar solicitudes de repuestos relacionadas
             from apps.inventory.models import SolicitudRepuesto
@@ -73,7 +175,7 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
             pass
         
         try:
-            # Intentar eliminar movimientos de stock relacionados
+            # Intentar limpiar movimientos de stock relacionados
             from apps.inventory.models import MovimientoStock
             MovimientoStock.objects.filter(ot=instance).update(ot=None)
         except Exception:
@@ -81,24 +183,67 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
             pass
         
         # Eliminar la OT
-        instance.delete() 
+        # Django automáticamente eliminará:
+        # - Items (CASCADE)
+        # - Pausas (CASCADE)
+        # - Evidencias (CASCADE)
+        # - Checklists (CASCADE)
+        instance.delete()
 
     @extend_schema(request=EmptySerializer, responses={200: None})
     @action(detail=True, methods=['post'], url_path='en-ejecucion')
     def en_ejecucion(self, request, pk=None):
+        """
+        Cambia el estado de la OT a EN_EJECUCION.
+        
+        Endpoint: POST /api/v1/work/ordenes/{id}/en-ejecucion/
+        
+        Permisos:
+        - Solo SUPERVISOR, ADMIN o MECANICO
+        
+        Flujo:
+        1. Verifica permisos
+        2. Obtiene la OT
+        3. Ejecuta transición de estado (valida que sea válida)
+        4. Retorna nuevo estado
+        
+        Retorna:
+        - 200: {"estado": "EN_EJECUCION"}
+        - 403: Si no tiene permisos
+        - 400: Si la transición no es válida
+        """
         if request.user.rol not in ("SUPERVISOR", "ADMIN", "MECANICO"):
-            return Response({"detail": "Solo SUPERVISOR/ADMIN/MECANICO pueden iniciar la ejecución."},
-                            status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"detail": "Solo SUPERVISOR/ADMIN/MECANICO pueden iniciar la ejecución."},
+                status=status.HTTP_403_FORBIDDEN
+            )
         ot = self.get_object()
-        do_transition(ot, "EN_EJECUCION")
+        do_transition(ot, "EN_EJECUCION")  # Valida y ejecuta transición
         return Response({"estado": ot.estado})
 
     @extend_schema(request=EmptySerializer, responses={200: None})
     @action(detail=True, methods=['post'], url_path='en-qa')
     def en_qa(self, request, pk=None):
+        """
+        Cambia el estado de la OT a EN_QA (Control de Calidad).
+        
+        Endpoint: POST /api/v1/work/ordenes/{id}/en-qa/
+        
+        Permisos:
+        - Solo SUPERVISOR o ADMIN
+        
+        Uso:
+        - Cuando el mecánico termina el trabajo y necesita revisión de calidad
+        
+        Retorna:
+        - 200: {"estado": "EN_QA"}
+        - 403: Si no tiene permisos
+        """
         if request.user.rol not in ("SUPERVISOR", "ADMIN"):
-            return Response({"detail": "Solo SUPERVISOR/ADMIN pueden mover a QA."},
-                            status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"detail": "Solo SUPERVISOR/ADMIN pueden mover a QA."},
+                status=status.HTTP_403_FORBIDDEN
+            )
         ot = self.get_object()
         do_transition(ot, "EN_QA")
         return Response({"estado": ot.estado})
@@ -107,10 +252,27 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='en-pausa')
     @transaction.atomic
     def en_pausa(self, request, pk=None):
-        """Transición directa a EN_PAUSA (alternativa a crear pausa)"""
+        """
+        Cambia el estado de la OT a EN_PAUSA.
+        
+        Endpoint: POST /api/v1/work/ordenes/{id}/en-pausa/
+        
+        Permisos:
+        - MECANICO, SUPERVISOR, ADMIN, JEFE_TALLER
+        
+        Nota:
+        - Alternativa a crear una Pausa explícita
+        - Útil para pausas rápidas sin necesidad de registrar motivo
+        
+        Retorna:
+        - 200: {"estado": "EN_PAUSA"}
+        - 403: Si no tiene permisos
+        """
         if request.user.rol not in ("MECANICO", "SUPERVISOR", "ADMIN", "JEFE_TALLER"):
-            return Response({"detail": "No autorizado para pausar OT."},
-                            status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"detail": "No autorizado para pausar OT."},
+                status=status.HTTP_403_FORBIDDEN
+            )
         ot = self.get_object()
         do_transition(ot, "EN_PAUSA")
         return Response({"estado": ot.estado})
@@ -119,21 +281,46 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='cerrar')
     @transaction.atomic
     def cerrar(self, request, pk=None):
-        """Cierra la OT directamente (solo si está en EN_QA o CERRADA)"""
+        """
+        Cierra la OT definitivamente.
+        
+        Endpoint: POST /api/v1/work/ordenes/{id}/cerrar/
+        
+        Permisos:
+        - Solo SUPERVISOR, ADMIN o JEFE_TALLER
+        
+        Requisitos:
+        - La OT debe estar en EN_QA o CERRADA
+        
+        Proceso:
+        1. Valida estado
+        2. Ejecuta transición a CERRADA
+        3. Genera PDF de cierre (tarea Celery asíncrona)
+        4. Registra auditoría
+        
+        Retorna:
+        - 200: {"estado": "CERRADA", "cierre": "2024-01-15T10:30:00Z"}
+        - 403: Si no tiene permisos
+        - 400: Si el estado no permite cerrar
+        """
         if request.user.rol not in ("SUPERVISOR", "ADMIN", "JEFE_TALLER"):
-            return Response({"detail": "Solo SUPERVISOR/ADMIN/JEFE_TALLER pueden cerrar la OT."},
-                            status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"detail": "Solo SUPERVISOR/ADMIN/JEFE_TALLER pueden cerrar la OT."},
+                status=status.HTTP_403_FORBIDDEN
+            )
         ot = self.get_object()
         
+        # Validar que el estado permita cerrar
         if ot.estado not in ("EN_QA", "CERRADA"):
             return Response(
                 {"detail": f"No se puede cerrar una OT en estado {ot.estado}. Debe estar en EN_QA."},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Ejecutar transición (actualiza estado y fecha de cierre)
         do_transition(ot, "CERRADA")
         
-        # Generar PDF de cierre automáticamente
+        # Generar PDF de cierre automáticamente (tarea asíncrona)
         from .tasks import generar_pdf_cierre
         generar_pdf_cierre.delay(str(ot.id), request.user.id)
         
@@ -151,9 +338,27 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
     @extend_schema(request=EmptySerializer, responses={200: None})
     @action(detail=True, methods=['post'], url_path='anular')
     def anular(self, request, pk=None):
+        """
+        Anula la OT (cancela antes de completarse).
+        
+        Endpoint: POST /api/v1/work/ordenes/{id}/anular/
+        
+        Permisos:
+        - Solo SUPERVISOR o ADMIN
+        
+        Uso:
+        - Cuando se detecta que la OT fue creada por error
+        - Cuando el vehículo ya no necesita reparación
+        
+        Retorna:
+        - 200: {"estado": "ANULADA"}
+        - 403: Si no tiene permisos
+        """
         if request.user.rol not in ("SUPERVISOR", "ADMIN"):
-            return Response({"detail": "Solo SUPERVISOR/ADMIN pueden anular la OT."},
-                            status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"detail": "Solo SUPERVISOR/ADMIN pueden anular la OT."},
+                status=status.HTTP_403_FORBIDDEN
+            )
         ot = self.get_object()
         do_transition(ot, "ANULADA")
         return Response({"estado": ot.estado})
@@ -165,7 +370,35 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='diagnostico')
     @transaction.atomic
     def diagnostico(self, request, pk=None):
-        """Jefe de Taller realiza diagnóstico"""
+        """
+        Jefe de Taller realiza diagnóstico de la OT.
+        
+        Endpoint: POST /api/v1/work/ordenes/{id}/diagnostico/
+        
+        Permisos:
+        - Solo JEFE_TALLER o ADMIN
+        
+        Requisitos:
+        - La OT debe estar en ABIERTA o EN_DIAGNOSTICO
+        - Se debe proporcionar el texto del diagnóstico
+        
+        Proceso:
+        1. Valida permisos y estado
+        2. Guarda diagnóstico y asigna jefe_taller
+        3. Establece fecha_diagnostico
+        4. Cambia estado a EN_DIAGNOSTICO
+        5. Registra auditoría
+        
+        Body JSON:
+        {
+            "diagnostico": "Texto del diagnóstico técnico"
+        }
+        
+        Retorna:
+        - 200: {"estado": "EN_DIAGNOSTICO", "diagnostico": "..."}
+        - 403: Si no tiene permisos
+        - 400: Si falta diagnóstico o estado inválido
+        """
         if request.user.rol not in ("JEFE_TALLER", "ADMIN"):
             return Response(
                 {"detail": "Solo JEFE_TALLER puede realizar diagnóstico."},
@@ -173,12 +406,14 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
             )
         ot = self.get_object()
         
+        # Validar estado
         if ot.estado not in ("ABIERTA", "EN_DIAGNOSTICO"):
             return Response(
                 {"detail": f"La OT debe estar en ABIERTA o EN_DIAGNOSTICO para realizar diagnóstico."},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Obtener diagnóstico del body
         diagnostico_texto = request.data.get("diagnostico", "")
         if not diagnostico_texto:
             return Response(
@@ -186,9 +421,12 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Guardar diagnóstico y asignar jefe de taller
         ot.diagnostico = diagnostico_texto
         ot.jefe_taller = request.user
         ot.fecha_diagnostico = timezone.now()
+        
+        # Cambiar estado (actualiza fecha_diagnostico automáticamente)
         do_transition(ot, "EN_DIAGNOSTICO")
         
         # Registrar auditoría
@@ -212,7 +450,39 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='aprobar-asignacion')
     @transaction.atomic
     def aprobar_asignacion(self, request, pk=None):
-        """Supervisor aprueba asignación de mecánico"""
+        """
+        Supervisor aprueba la asignación de un mecánico a la OT.
+        
+        Endpoint: POST /api/v1/work/ordenes/{id}/aprobar-asignacion/
+        
+        Permisos:
+        - Solo SUPERVISOR, ADMIN o COORDINADOR_ZONA
+        
+        Requisitos:
+        - La OT debe estar en EN_DIAGNOSTICO
+        - Se debe proporcionar mecanico_id
+        
+        Proceso:
+        1. Valida permisos y estado
+        2. Busca el mecánico (debe tener rol MECANICO)
+        3. Asigna mecánico y supervisor
+        4. Establece fechas de aprobación y asignación
+        5. Ajusta prioridad si se proporciona
+        6. Cambia estado a EN_EJECUCION
+        7. Registra auditoría
+        
+        Body JSON:
+        {
+            "mecanico_id": "uuid-del-mecanico",
+            "prioridad": "ALTA"  // Opcional
+        }
+        
+        Retorna:
+        - 200: {"estado": "EN_EJECUCION", "mecanico": "...", "supervisor": "..."}
+        - 403: Si no tiene permisos
+        - 400: Si falta mecanico_id o estado inválido
+        - 404: Si el mecánico no existe
+        """
         if request.user.rol not in ("SUPERVISOR", "ADMIN", "COORDINADOR_ZONA"):
             return Response(
                 {"detail": "Solo SUPERVISOR/COORDINADOR puede aprobar asignación."},
@@ -220,12 +490,14 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
             )
         ot = self.get_object()
         
+        # Validar estado
         if ot.estado != "EN_DIAGNOSTICO":
             return Response(
                 {"detail": "La OT debe estar en EN_DIAGNOSTICO para aprobar asignación."},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Obtener ID del mecánico
         mecanico_id = request.data.get("mecanico_id")
         if not mecanico_id:
             return Response(
@@ -233,6 +505,7 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Buscar mecánico (debe tener rol MECANICO)
         from apps.users.models import User
         try:
             mecanico = User.objects.get(id=mecanico_id, rol="MECANICO")
@@ -242,6 +515,7 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
         
+        # Asignar mecánico y supervisor
         ot.mecanico = mecanico
         ot.supervisor = request.user
         ot.fecha_aprobacion_supervisor = timezone.now()
@@ -252,6 +526,7 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
         if nueva_prioridad:
             ot.prioridad = nueva_prioridad
         
+        # Cambiar estado a EN_EJECUCION
         do_transition(ot, "EN_EJECUCION")
         
         # Registrar auditoría
@@ -272,7 +547,32 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='retrabajo')
     @transaction.atomic
     def retrabajo(self, request, pk=None):
-        """Marca OT como retrabajo (desde QA)"""
+        """
+        Marca la OT como retrabajo (requiere corrección después de QA).
+        
+        Endpoint: POST /api/v1/work/ordenes/{id}/retrabajo/
+        
+        Permisos:
+        - Solo SUPERVISOR, ADMIN o JEFE_TALLER
+        
+        Requisitos:
+        - La OT debe estar en EN_QA
+        
+        Proceso:
+        1. Valida permisos y estado
+        2. Cambia estado a RETRABAJO
+        3. Registra auditoría con motivo
+        
+        Body JSON:
+        {
+            "motivo": "Retrabajo por calidad"  // Opcional
+        }
+        
+        Retorna:
+        - 200: {"estado": "RETRABAJO", "motivo": "..."}
+        - 403: Si no tiene permisos
+        - 400: Si el estado no permite retrabajo
+        """
         if request.user.rol not in ("SUPERVISOR", "ADMIN", "JEFE_TALLER"):
             return Response(
                 {"detail": "Solo SUPERVISOR/JEFE_TALLER puede marcar como retrabajo."},
@@ -280,13 +580,17 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
             )
         ot = self.get_object()
         
+        # Validar estado
         if ot.estado != "EN_QA":
             return Response(
                 {"detail": "Solo se puede marcar como retrabajo desde EN_QA."},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Obtener motivo (opcional)
         motivo = request.data.get("motivo", "Retrabajo por calidad")
+        
+        # Cambiar estado
         do_transition(ot, "RETRABAJO")
         
         # Registrar auditoría
@@ -303,20 +607,61 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
 
 # ============== ITEMS =================
 class ItemOTViewSet(viewsets.ModelViewSet):
-    queryset = ItemOT.objects.select_related("ot")
+    """
+    ViewSet para gestión de Items de OT (repuestos y servicios).
+    
+    Endpoints:
+    - GET /api/v1/work/items/ → Listar items
+    - POST /api/v1/work/items/ → Crear item
+    - GET /api/v1/work/items/{id}/ → Ver item
+    - PUT/PATCH /api/v1/work/items/{id}/ → Editar item
+    - DELETE /api/v1/work/items/{id}/ → Eliminar item
+    
+    Permisos:
+    - Usa WorkOrderPermission
+    
+    Filtros:
+    - Por tipo (REPUESTO/SERVICIO)
+    - Por OT
+    - Búsqueda por descripción
+    - Ordenamiento por costo, cantidad
+    """
+    queryset = ItemOT.objects.select_related("ot")  # Optimización: reduce queries
     serializer_class = ItemOTSerializer
     permission_classes = [WorkOrderPermission]
 
-    # solo campos que EXISTEN en ItemOT
+    # Configuración de filtros
     filter_backends = [DjangoFilterBackend, OrderingFilter, SearchFilter]
-    filterset_fields = ["tipo", "ot"]
-    search_fields = ["descripcion"]
-    ordering_fields = ["costo_unitario", "cantidad"]
-    ordering = ["-id"]
+    filterset_fields = ["tipo", "ot"]  # Filtros por tipo y OT
+    search_fields = ["descripcion"]  # Búsqueda por descripción
+    ordering_fields = ["costo_unitario", "cantidad"]  # Campos ordenables
+    ordering = ["-id"]  # Orden por defecto: más recientes primero
 
 
 # ============== PRESUPUESTO =================
 class PresupuestoViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gestión de Presupuestos.
+    
+    Endpoints:
+    - GET /api/v1/work/presupuestos/ → Listar presupuestos
+    - POST /api/v1/work/presupuestos/ → Crear presupuesto (con detalles)
+    - GET /api/v1/work/presupuestos/{id}/ → Ver presupuesto
+    - PUT/PATCH /api/v1/work/presupuestos/{id}/ → Editar presupuesto
+    - DELETE /api/v1/work/presupuestos/{id}/ → Eliminar presupuesto
+    
+    Permisos:
+    - Usa WorkOrderPermission
+    
+    Filtros:
+    - Por requiere_aprobacion
+    - Por OT
+    - Ordenamiento por total, fecha
+    
+    Nota:
+    - Al crear, se calcula el total automáticamente
+    - Si total > umbral (1000), requiere_aprobacion = True
+    """
     queryset = Presupuesto.objects.select_related("ot")
     serializer_class = PresupuestoSerializer
     permission_classes = [WorkOrderPermission]
@@ -327,44 +672,126 @@ class PresupuestoViewSet(viewsets.ModelViewSet):
 
     @transaction.atomic
     def perform_create(self, serializer):
+        """
+        Crea un presupuesto con sus detalles.
+        
+        Este método se ejecuta al crear un presupuesto.
+        Calcula el total sumando todos los detalles y determina
+        si requiere aprobación según el umbral.
+        
+        Body JSON esperado:
+        {
+            "ot": "uuid-de-ot",
+            "detalles_data": [
+                {
+                    "concepto": "Repuesto X",
+                    "cantidad": 2,
+                    "precio": 150.00
+                },
+                ...
+            ]
+        }
+        
+        Proceso:
+        1. Calcula total sumando cantidad * precio de cada detalle
+        2. Determina si requiere aprobación (total > umbral)
+        3. Crea el presupuesto
+        4. Crea los detalles asociados
+        
+        Umbral:
+        - Por defecto: $1000.00
+        - Si total > umbral → requiere_aprobacion = True
+        """
+        # Obtener detalles del body
         detalles_data = self.request.data.get('detalles_data', [])
-        total = Decimal('0')
+        total = Decimal('0')  # Usar Decimal para precisión en dinero
         normalizados = []
+        
+        # Calcular total y normalizar datos
         for d in detalles_data:
             cantidad = Decimal(str(d.get('cantidad', '0')))
             precio = Decimal(str(d.get('precio', '0')))
-            total += cantidad * precio
+            total += cantidad * precio  # Sumar al total
+            
+            # Normalizar para crear detalles
             normalizados.append({
                 "concepto": d.get("concepto", ""),
                 "cantidad": int(cantidad),
                 "precio": precio
             })
 
+        # Umbral para requerir aprobación
         UMBRAL = Decimal('1000.00')
+        
+        # Crear presupuesto con total calculado
         presupuesto = serializer.save(
             total=total,
-            requiere_aprobacion=(total > UMBRAL),
+            requiere_aprobacion=(total > UMBRAL),  # Requiere aprobación si supera umbral
             umbral=UMBRAL
         )
+        
+        # Crear detalles asociados
         for nd in normalizados:
             DetallePresup.objects.create(presupuesto=presupuesto, **nd)
 
 
 # ============== DETALLES PRESUP =================
 class DetallePresupViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gestión de Detalles de Presupuesto.
+    
+    Endpoints:
+    - GET /api/v1/work/detalles-presup/ → Listar detalles
+    - POST /api/v1/work/detalles-presup/ → Crear detalle
+    - GET /api/v1/work/detalles-presup/{id}/ → Ver detalle
+    - PUT/PATCH /api/v1/work/detalles-presup/{id}/ → Editar detalle
+    - DELETE /api/v1/work/detalles-presup/{id}/ → Eliminar detalle
+    
+    Permisos:
+    - Requiere autenticación
+    
+    Filtros:
+    - Por presupuesto
+    - Búsqueda por concepto
+    - Ordenamiento por precio, cantidad
+    """
     queryset = DetallePresup.objects.select_related("presupuesto").all()
     serializer_class = DetallePresupSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     filter_backends = [DjangoFilterBackend, OrderingFilter, SearchFilter]
     filterset_fields = ["presupuesto"]
-    search_fields = ["concepto"]        # <- existe en el modelo
+    search_fields = ["concepto"]
     ordering_fields = ["precio", "cantidad", "id"]
     ordering = ["-id"]
 
 
 # ============== APROBACIONES (SPONSOR) =================
 class AprobacionViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gestión de Aprobaciones de Presupuesto por Sponsor.
+    
+    Endpoints:
+    - GET /api/v1/work/aprobaciones/ → Listar aprobaciones
+    - POST /api/v1/work/aprobaciones/ → Crear aprobación
+    - GET /api/v1/work/aprobaciones/{id}/ → Ver aprobación
+    - PUT/PATCH /api/v1/work/aprobaciones/{id}/ → Editar aprobación
+    - DELETE /api/v1/work/aprobaciones/{id}/ → Eliminar aprobación
+    
+    Acciones personalizadas:
+    - POST /api/v1/work/aprobaciones/{id}/aprobar/ → Aprobar presupuesto
+    - POST /api/v1/work/aprobaciones/{id}/rechazar/ → Rechazar presupuesto
+    
+    Permisos:
+    - Usa WorkOrderPermission
+    - Solo SPONSOR/ADMIN pueden aprobar/rechazar
+    
+    Filtros:
+    - Por estado (PENDIENTE/APROBADO/RECHAZADO)
+    - Por sponsor
+    - Por presupuesto
+    - Ordenamiento por fecha
+    """
     queryset = Aprobacion.objects.select_related("presupuesto", "sponsor")
     serializer_class = AprobacionSerializer
     permission_classes = [WorkOrderPermission]
@@ -377,11 +804,33 @@ class AprobacionViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='aprobar')
     @transaction.atomic
     def aprobar(self, request, pk=None):
+        """
+        Aprueba un presupuesto.
+        
+        Endpoint: POST /api/v1/work/aprobaciones/{id}/aprobar/
+        
+        Permisos:
+        - Solo SPONSOR o ADMIN
+        
+        Proceso:
+        1. Valida permisos
+        2. Cambia estado a APROBADO
+        3. Registra auditoría
+        
+        Retorna:
+        - 200: {"estado": "APROBADO"}
+        - 403: Si no tiene permisos
+        """
         if request.user.rol not in ("SPONSOR", "ADMIN"):
-            return Response({"detail": "Solo SPONSOR/ADMIN pueden aprobar."}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"detail": "Solo SPONSOR/ADMIN pueden aprobar."}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
         ap = self.get_object()
-        ap.estado = "APROBADO"   # <- coincide con choices
+        ap.estado = "APROBADO"
         ap.save(update_fields=["estado"])
+        
+        # Registrar auditoría
         Auditoria.objects.create(
             usuario=request.user,
             accion="APROBAR_PRESUPUESTO",
@@ -395,11 +844,33 @@ class AprobacionViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='rechazar')
     @transaction.atomic
     def rechazar(self, request, pk=None):
+        """
+        Rechaza un presupuesto.
+        
+        Endpoint: POST /api/v1/work/aprobaciones/{id}/rechazar/
+        
+        Permisos:
+        - Solo SPONSOR o ADMIN
+        
+        Proceso:
+        1. Valida permisos
+        2. Cambia estado a RECHAZADO
+        3. Registra auditoría
+        
+        Retorna:
+        - 200: {"estado": "RECHAZADO"}
+        - 403: Si no tiene permisos
+        """
         if request.user.rol not in ("SPONSOR", "ADMIN"):
-            return Response({"detail": "Solo SPONSOR/ADMIN pueden rechazar."}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"detail": "Solo SPONSOR/ADMIN pueden rechazar."}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
         ap = self.get_object()
-        ap.estado = "RECHAZADO"  # <- coincide con choices
+        ap.estado = "RECHAZADO"
         ap.save(update_fields=["estado"])
+        
+        # Registrar auditoría
         Auditoria.objects.create(
             usuario=request.user,
             accion="RECHAZAR_PRESUPUESTO",
@@ -412,7 +883,32 @@ class AprobacionViewSet(viewsets.ModelViewSet):
 
 # ============== PAUSAS =================
 class PausaViewSet(viewsets.ModelViewSet):
-    """ViewSet para gestión de pausas, incluyendo colación automática"""
+    """
+    ViewSet para gestión de Pausas durante la ejecución de OT.
+    
+    Endpoints:
+    - GET /api/v1/work/pausas/ → Listar pausas
+    - POST /api/v1/work/pausas/ → Crear pausa
+    - GET /api/v1/work/pausas/{id}/ → Ver pausa
+    - PUT/PATCH /api/v1/work/pausas/{id}/ → Editar pausa
+    - DELETE /api/v1/work/pausas/{id}/ → Eliminar pausa
+    
+    Acciones personalizadas:
+    - POST /api/v1/work/pausas/{id}/reanudar/ → Reanudar pausa
+    
+    Características especiales:
+    - Detección automática de colación (12:30-13:15)
+    - Cambio automático de estado de OT a EN_PAUSA al crear
+    - Cambio automático de estado de OT a EN_EJECUCION al reanudar
+    
+    Permisos:
+    - Usa WorkOrderPermission
+    
+    Filtros:
+    - Por OT
+    - Por usuario
+    - Ordenamiento por inicio, fin
+    """
     queryset = Pausa.objects.select_related("ot", "usuario")
     serializer_class = PausaSerializer
     permission_classes = [WorkOrderPermission]
@@ -425,18 +921,41 @@ class PausaViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='reanudar')
     @transaction.atomic
     def reanudar(self, request, pk=None):
-        """Reanuda una pausa y cambia el estado de la OT a EN_EJECUCION"""
+        """
+        Reanuda una pausa activa.
+        
+        Endpoint: POST /api/v1/work/pausas/{id}/reanudar/
+        
+        Permisos:
+        - MECANICO, SUPERVISOR, ADMIN, JEFE_TALLER
+        
+        Proceso:
+        1. Valida que la pausa esté activa (fin es None)
+        2. Establece fecha de fin
+        3. Si la OT está en EN_PAUSA, cambia a EN_EJECUCION
+        4. Registra auditoría
+        
+        Retorna:
+        - 200: {"pausa": {...}, "ot_estado": "EN_EJECUCION"}
+        - 403: Si no tiene permisos
+        - 400: Si la pausa ya fue reanudada
+        """
         if request.user.rol not in ("MECANICO", "SUPERVISOR", "ADMIN", "JEFE_TALLER"):
-            return Response({"detail": "No autorizado para reanudar pausas."},
-                            status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"detail": "No autorizado para reanudar pausas."},
+                status=status.HTTP_403_FORBIDDEN
+            )
         
         pausa = self.get_object()
         
+        # Validar que la pausa esté activa
         if pausa.fin is not None:
-            return Response({"detail": "Esta pausa ya fue reanudada."},
-                            status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Esta pausa ya fue reanudada."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
-        from django.utils import timezone
+        # Establecer fecha de fin
         pausa.fin = timezone.now()
         pausa.save(update_fields=["fin"])
         
@@ -446,7 +965,6 @@ class PausaViewSet(viewsets.ModelViewSet):
             do_transition(ot, "EN_EJECUCION")
         
         # Registrar auditoría
-        from .models import Auditoria
         Auditoria.objects.create(
             usuario=request.user,
             accion="REANUDAR_PAUSA",
@@ -461,12 +979,29 @@ class PausaViewSet(viewsets.ModelViewSet):
         })
 
     def perform_create(self, serializer):
-        """Al crear una pausa, cambia el estado de la OT a EN_PAUSA si está en EN_EJECUCION"""
+        """
+        Crea una pausa y cambia el estado de la OT automáticamente.
+        
+        Este método se ejecuta al crear una pausa.
+        
+        Características:
+        - Detecta automáticamente si es horario de colación (12:30-13:15)
+        - Si es colación y no se especifica tipo, asigna tipo COLACION automáticamente
+        - Cambia el estado de la OT a EN_PAUSA si está en EN_EJECUCION
+        - Registra auditoría
+        
+        Body JSON esperado:
+        {
+            "ot": "uuid-de-ot",
+            "tipo": "COLACION",  // Opcional, se detecta automáticamente
+            "motivo": "Pausa para colación"
+        }
+        """
         # Detectar si es colación automática (12:30-13:15)
         ahora = timezone.now()
-        hora_actual = ahora.hour * 60 + ahora.minute
-        hora_colacion_inicio = 12 * 60 + 30  # 12:30
-        hora_colacion_fin = 13 * 60 + 15     # 13:15
+        hora_actual = ahora.hour * 60 + ahora.minute  # Convertir a minutos
+        hora_colacion_inicio = 12 * 60 + 30  # 12:30 = 750 minutos
+        hora_colacion_fin = 13 * 60 + 15     # 13:15 = 795 minutos
         
         es_colacion = hora_actual >= hora_colacion_inicio and hora_actual <= hora_colacion_fin
         
@@ -477,6 +1012,7 @@ class PausaViewSet(viewsets.ModelViewSet):
             serializer.validated_data["tipo"] = "COLACION"
             serializer.validated_data["es_automatica"] = True
         
+        # Crear pausa (asignar usuario automáticamente)
         pausa = serializer.save(usuario=self.request.user)
         ot = pausa.ot
         
@@ -485,7 +1021,6 @@ class PausaViewSet(viewsets.ModelViewSet):
             do_transition(ot, "EN_PAUSA")
         
         # Registrar auditoría
-        from .models import Auditoria
         Auditoria.objects.create(
             usuario=self.request.user,
             accion="CREAR_PAUSA",
@@ -502,6 +1037,30 @@ class PausaViewSet(viewsets.ModelViewSet):
 
 # ============== CHECKLIST =================
 class ChecklistViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gestión de Checklists de Calidad (QA).
+    
+    Endpoints:
+    - GET /api/v1/work/checklists/ → Listar checklists
+    - POST /api/v1/work/checklists/ → Crear checklist
+    - GET /api/v1/work/checklists/{id}/ → Ver checklist
+    - PUT/PATCH /api/v1/work/checklists/{id}/ → Editar checklist
+    - DELETE /api/v1/work/checklists/{id}/ → Eliminar checklist
+    
+    Acciones personalizadas:
+    - POST /api/v1/work/checklists/{id}/aprobar-qa/ → Aprobar QA y cerrar OT
+    - POST /api/v1/work/checklists/{id}/rechazar-qa/ → Rechazar QA y devolver a EN_EJECUCION
+    
+    Permisos:
+    - Usa WorkOrderPermission
+    - Solo SUPERVISOR/ADMIN/JEFE_TALLER pueden aprobar/rechazar QA
+    
+    Filtros:
+    - Por resultado (OK/NO_OK)
+    - Por OT
+    - Búsqueda por observaciones
+    - Ordenamiento por fecha
+    """
     queryset = Checklist.objects.select_related("ot", "verificador")
     serializer_class = ChecklistSerializer
     permission_classes = [WorkOrderPermission]
@@ -512,7 +1071,20 @@ class ChecklistViewSet(viewsets.ModelViewSet):
     search_fields = ["observaciones"]
     
     def perform_create(self, serializer):
-        """Al crear checklist, se asigna el verificador automáticamente"""
+        """
+        Crea un checklist y asigna el verificador automáticamente.
+        
+        Este método se ejecuta al crear un checklist.
+        Asigna el usuario actual como verificador.
+        
+        Body JSON esperado:
+        {
+            "ot": "uuid-de-ot",
+            "resultado": "OK",  // o "NO_OK"
+            "observaciones": "Checklist completado"
+        }
+        """
+        # Crear checklist (asignar verificador automáticamente)
         checklist = serializer.save(verificador=self.request.user)
         
         # Registrar auditoría
@@ -528,7 +1100,28 @@ class ChecklistViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='aprobar-qa')
     @transaction.atomic
     def aprobar_qa(self, request, pk=None):
-        """Aprueba QA y cierra la OT"""
+        """
+        Aprueba QA y cierra la OT.
+        
+        Endpoint: POST /api/v1/work/checklists/{id}/aprobar-qa/
+        
+        Permisos:
+        - Solo SUPERVISOR, ADMIN o JEFE_TALLER
+        
+        Requisitos:
+        - La OT debe estar en EN_QA
+        
+        Proceso:
+        1. Valida permisos y estado
+        2. Actualiza checklist a resultado OK (si no lo está)
+        3. Cierra la OT (cambia a CERRADA)
+        4. Registra auditoría
+        
+        Retorna:
+        - 200: {"checklist": {...}, "ot_estado": "CERRADA", "mensaje": "..."}
+        - 403: Si no tiene permisos
+        - 400: Si el estado no permite aprobar QA
+        """
         if request.user.rol not in ("SUPERVISOR", "ADMIN", "JEFE_TALLER"):
             return Response(
                 {"detail": "Solo SUPERVISOR/ADMIN/JEFE_TALLER pueden aprobar QA."},
@@ -538,6 +1131,7 @@ class ChecklistViewSet(viewsets.ModelViewSet):
         checklist = self.get_object()
         ot = checklist.ot
         
+        # Validar estado
         if ot.estado != "EN_QA":
             return Response(
                 {"detail": f"La OT no está en estado EN_QA. Estado actual: {ot.estado}"},
@@ -572,7 +1166,34 @@ class ChecklistViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='rechazar-qa')
     @transaction.atomic
     def rechazar_qa(self, request, pk=None):
-        """Rechaza QA y devuelve la OT a EN_EJECUCION para corrección"""
+        """
+        Rechaza QA y devuelve la OT a EN_EJECUCION para corrección.
+        
+        Endpoint: POST /api/v1/work/checklists/{id}/rechazar-qa/
+        
+        Permisos:
+        - Solo SUPERVISOR, ADMIN o JEFE_TALLER
+        
+        Requisitos:
+        - La OT debe estar en EN_QA
+        
+        Proceso:
+        1. Valida permisos y estado
+        2. Actualiza checklist a resultado NO_OK
+        3. Agrega observaciones (si se proporcionan)
+        4. Devuelve OT a EN_EJECUCION
+        5. Registra auditoría
+        
+        Body JSON:
+        {
+            "observaciones": "Motivo del rechazo"  // Opcional
+        }
+        
+        Retorna:
+        - 200: {"checklist": {...}, "ot_estado": "EN_EJECUCION", "mensaje": "..."}
+        - 403: Si no tiene permisos
+        - 400: Si el estado no permite rechazar QA
+        """
         if request.user.rol not in ("SUPERVISOR", "ADMIN", "JEFE_TALLER"):
             return Response(
                 {"detail": "Solo SUPERVISOR/ADMIN/JEFE_TALLER pueden rechazar QA."},
@@ -582,6 +1203,7 @@ class ChecklistViewSet(viewsets.ModelViewSet):
         checklist = self.get_object()
         ot = checklist.ot
         
+        # Validar estado
         if ot.estado != "EN_QA":
             return Response(
                 {"detail": f"La OT no está en estado EN_QA. Estado actual: {ot.estado}"},
@@ -619,6 +1241,33 @@ class ChecklistViewSet(viewsets.ModelViewSet):
 
 # ============== EVIDENCIAS (incluye presigned S3) =================
 class EvidenciaViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gestión de Evidencias (fotos/documentos).
+    
+    Endpoints:
+    - GET /api/v1/work/evidencias/ → Listar evidencias
+    - POST /api/v1/work/evidencias/ → Crear evidencia (después de subir a S3)
+    - GET /api/v1/work/evidencias/{id}/ → Ver evidencia
+    - PUT/PATCH /api/v1/work/evidencias/{id}/ → Editar evidencia
+    - DELETE /api/v1/work/evidencias/{id}/ → Eliminar evidencia
+    
+    Acciones personalizadas:
+    - POST /api/v1/work/evidencias/presigned/ → Obtener URL presigned para subir archivo
+    
+    Permisos:
+    - Usa WorkOrderPermission
+    - Solo MECANICO, SUPERVISOR, ADMIN, GUARDIA pueden subir evidencias
+    
+    Filtros:
+    - Por tipo (FOTO/PDF/OTRO)
+    - Por OT
+    - Ordenamiento por fecha de subida
+    
+    Flujo de subida:
+    1. Frontend llama a /presigned/ para obtener URL
+    2. Frontend sube archivo directamente a S3 usando URL presigned
+    3. Frontend llama a POST /evidencias/ con la URL del archivo
+    """
     queryset = Evidencia.objects.select_related("ot")
     serializer_class = EvidenciaSerializer
     permission_classes = [WorkOrderPermission]
@@ -630,14 +1279,60 @@ class EvidenciaViewSet(viewsets.ModelViewSet):
     @extend_schema(request=EmptySerializer, responses={200: None})
     @action(detail=False, methods=['post'], url_path='presigned')
     def presigned(self, request):
+        """
+        Genera una URL presigned para subir un archivo a S3.
+        
+        Endpoint: POST /api/v1/work/evidencias/presigned/
+        
+        Permisos:
+        - Solo MECANICO, SUPERVISOR, ADMIN, GUARDIA
+        
+        Body JSON:
+        {
+            "ot": "uuid-de-ot",
+            "filename": "foto.jpg",
+            "content_type": "image/jpeg",  // Opcional, se detecta automáticamente
+            "file_size": 1024000  // Tamaño en bytes
+        }
+        
+        Validaciones:
+        - Tamaño máximo: 10MB
+        - Tipos permitidos: Imágenes, PDFs (validado por middleware)
+        
+        Retorna:
+        - 200: {
+            "upload": {
+                "url": "https://s3...",
+                "fields": {...}
+            },
+            "file_url": "https://s3.../evidencias/ot-id/uuid-filename"
+          }
+        - 403: Si no tiene permisos
+        - 400: Si el archivo no es válido
+        - 500: Si falta configuración de S3
+        
+        Uso:
+        1. Frontend obtiene URL presigned
+        2. Frontend sube archivo directamente a S3 usando la URL
+        3. Frontend crea registro de Evidencia con la URL del archivo
+        """
+        # Verificar permisos
         if request.user.rol not in ("MECANICO", "SUPERVISOR", "ADMIN", "GUARDIA"):
-            return Response({"detail": "No autorizado para subir evidencias."}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"detail": "No autorizado para subir evidencias."}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
 
+        # Obtener configuración de S3
         bucket = os.getenv("AWS_STORAGE_BUCKET_NAME")
         region = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
         if not bucket:
-            return Response({"detail": "Falta configurar AWS_STORAGE_BUCKET_NAME."}, status=500)
+            return Response(
+                {"detail": "Falta configurar AWS_STORAGE_BUCKET_NAME."}, 
+                status=500
+            )
 
+        # Obtener datos del archivo
         ot_id = request.data.get("ot")
         filename = request.data.get("filename", f"evidencia-{uuid.uuid4()}.bin")
         content_type = request.data.get("content_type") or mimetypes.guess_type(filename)[0] or "application/octet-stream"
@@ -662,36 +1357,42 @@ class EvidenciaViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # Generar key único para el archivo
         key = f"evidencias/{ot_id}/{uuid.uuid4()}-{filename}"
 
+        # Determinar si usar LocalStack (desarrollo) o AWS real (producción)
         use_local = os.getenv("USE_LOCALSTACK_S3", "0") == "1"
         endpoint_url = os.getenv("AWS_ENDPOINT_URL") if use_local else None
 
+        # Crear cliente S3
         s3 = boto3.client(
             "s3",
             region_name=region,
-            endpoint_url=endpoint_url,
+            endpoint_url=endpoint_url,  # LocalStack en desarrollo
             config=Config(s3={"addressing_style": "path"})
         )
 
         # Límite de 10MB
         max_size = 10 * 1024 * 1024
+        
+        # Generar URL presigned para POST (subida directa)
         presigned = s3.generate_presigned_post(
             Bucket=bucket,
             Key=key,
             Fields={"Content-Type": content_type},
             Conditions=[
                 {"Content-Type": content_type},
-                ["content-length-range", 0, max_size]
+                ["content-length-range", 0, max_size]  # Validar tamaño
             ],
-            ExpiresIn=60 * 5
+            ExpiresIn=60 * 5  # Expira en 5 minutos
         )
 
+        # Construir URL final del archivo
         if use_local:
+            # LocalStack: http://localhost:4566/bucket/key
             file_url = f"{os.getenv('AWS_ENDPOINT_URL','http://localhost:4566')}/{bucket}/{key}"
         else:
+            # AWS real: https://bucket.s3.region.amazonaws.com/key
             file_url = f"https://{bucket}.s3.{region}.amazonaws.com/{key}"
 
         return Response({"upload": presigned, "file_url": file_url})
-
-
