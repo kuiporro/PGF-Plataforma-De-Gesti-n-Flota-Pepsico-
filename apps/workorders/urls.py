@@ -19,4 +19,6 @@ router.register(r'pausas', PausaViewSet, basename='pausa')
 router.register(r'checklists', ChecklistViewSet, basename='checklist')
 router.register(r'evidencias', EvidenciaViewSet, basename='evidencia')
 
-urlpatterns = router.urls
+urlpatterns = router.urls + [
+    path('ping/', PingView.as_view(), name='ping'),
+]

@@ -76,8 +76,7 @@ def vehiculo(db, supervisor_user):
         marca="Toyota",
         modelo="Hilux",
         anio=2020,
-        tipo_vehiculo=Vehiculo.TIPOS[0][0],  # ELECTRICO
-        tipo_motor=Vehiculo.TIPOS[0][0],
+        tipo=Vehiculo.TIPOS[0][0],  # ELECTRICO
         estado=Vehiculo.ESTADOS[0][0],  # ACTIVO
         site="SITE_TEST",
         supervisor=supervisor_user,
@@ -92,10 +91,10 @@ def orden_trabajo(db, vehiculo, supervisor_user, jefe_taller_user):
         vehiculo=vehiculo,
         supervisor=supervisor_user,
         jefe_taller=jefe_taller_user,
-        motivo_ingreso="Prueba de OT",
+        motivo="Prueba de OT",
         estado=OrdenTrabajo.ESTADOS[0][0],  # ABIERTA
         site="SITE_TEST",
-        fecha_apertura=datetime.now()
+        apertura=datetime.now()
     )
 
 

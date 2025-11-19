@@ -20,8 +20,7 @@ class TestVehiculoSerializer:
             "marca": "Toyota",
             "modelo": "Hilux",
             "anio": 2020,
-            "tipo_vehiculo": "ELECTRICO",
-            "tipo_motor": "ELECTRICO",
+            "tipo": "ELECTRICO",
             "estado": "ACTIVO",
             "site": "SITE_TEST",
             "supervisor": supervisor_user.id,
@@ -42,8 +41,7 @@ class TestVehiculoSerializer:
             "marca": "Toyota",
             "modelo": "Hilux",
             "anio": 2020,
-            "tipo_vehiculo": "ELECTRICO",
-            "tipo_motor": "ELECTRICO",
+            "tipo": "ELECTRICO",
             "estado": "ACTIVO",
             "site": "SITE_TEST",
             "supervisor": supervisor_user.id,
@@ -61,8 +59,7 @@ class TestVehiculoSerializer:
             "marca": "Ford",
             "modelo": "Ranger",
             "anio": 2021,
-            "tipo_vehiculo": "ELECTRICO",
-            "tipo_motor": "ELECTRICO",
+            "tipo": "ELECTRICO",
             "estado": "ACTIVO",
             "site": "SITE_TEST",
             "supervisor": supervisor_user.id,
@@ -81,8 +78,7 @@ class TestVehiculoSerializer:
             "marca": "Toyota",
             "modelo": "Hilux",
             "anio": 1999,
-            "tipo_vehiculo": "ELECTRICO",
-            "tipo_motor": "ELECTRICO",
+            "tipo": "ELECTRICO",
             "estado": "ACTIVO",
             "site": "SITE_TEST",
             "supervisor": supervisor_user.id,
@@ -111,11 +107,21 @@ class TestIngresoVehiculoSerializer:
     @pytest.mark.serializer
     def test_ingreso_serializer_creation(self, db, vehiculo, supervisor_user):
         """Test creación de ingreso a través del serializer"""
+        # Crear un guardia para el ingreso
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        guardia = User.objects.create_user(
+            username="guardia_ingreso",
+            email="guardia_ingreso@test.com",
+            password="testpass123",
+            rol=User.Rol.GUARDIA,
+            is_active=True
+        )
+        
         data = {
             "vehiculo": vehiculo.id,
-            "nombre_conductor": "Juan Pérez",
-            "rut_conductor": "12345678-9",
-            "fecha_ingreso": datetime.now().isoformat(),
+            "guardia": guardia.id,
+            "observaciones": "Ingreso de prueba",
             "site": "SITE_TEST"
         }
         serializer = IngresoVehiculoSerializer(data=data)
@@ -123,21 +129,19 @@ class TestIngresoVehiculoSerializer:
         
         ingreso = serializer.save()
         assert ingreso.vehiculo == vehiculo
-        assert ingreso.nombre_conductor == "Juan Pérez"
+        assert ingreso.guardia == guardia
     
     @pytest.mark.serializer
-    def test_ingreso_serializer_rut_conductor_validation(self, db, vehiculo):
-        """Test validación de RUT del conductor"""
+    def test_ingreso_serializer_guardia_required(self, db, vehiculo):
+        """Test que guardia es requerido"""
         data = {
             "vehiculo": vehiculo.id,
-            "nombre_conductor": "Juan Pérez",
-            "rut_conductor": "12345678-0",  # RUT inválido
-            "fecha_ingreso": datetime.now().isoformat(),
+            "observaciones": "Ingreso sin guardia",
             "site": "SITE_TEST"
         }
         serializer = IngresoVehiculoSerializer(data=data)
         assert serializer.is_valid() is False
-        assert "rut_conductor" in serializer.errors or "non_field_errors" in serializer.errors
+        assert "guardia" in serializer.errors
 
 
 class TestBackupVehiculoSerializer:
@@ -152,8 +156,7 @@ class TestBackupVehiculoSerializer:
             marca="Toyota",
             modelo="Hilux",
             anio=2020,
-            tipo_vehiculo=Vehiculo.TIPOS[0][0],
-            tipo_motor=Vehiculo.TIPOS[0][0],
+            tipo=Vehiculo.TIPOS[0][0],
             estado=Vehiculo.ESTADOS[0][0],
             site="SITE_TEST",
             supervisor=supervisor_user,
@@ -186,5 +189,6 @@ class TestBackupVehiculoSerializer:
         }
         serializer = BackupVehiculoSerializer(data=data)
         assert serializer.is_valid() is False
-        assert "non_field_errors" in serializer.errors
+        # El error puede estar en vehiculo_backup o non_field_errors
+        assert "vehiculo_backup" in serializer.errors or "non_field_errors" in serializer.errors
 

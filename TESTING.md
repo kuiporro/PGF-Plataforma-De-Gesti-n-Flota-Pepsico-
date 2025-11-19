@@ -178,8 +178,14 @@ open test-results/coverage/index.html
 # Generar reporte
 docker compose exec web sh -c "cd /app && npm run test:coverage"
 
-# Los reportes se generan en coverage/ dentro del contenedor
-# Para verlos, copia desde el contenedor o usa volúmenes
+# Los reportes se generan automáticamente en:
+# - test-results/frontend-coverage/ (HTML, JSON)
+#   - index.html (cobertura HTML interactiva)
+#   - coverage.json (cobertura completa)
+#   - coverage-summary.json (resumen de cobertura)
+
+# Abrir reporte HTML
+open test-results/frontend-coverage/index.html
 ```
 
 ---
@@ -297,20 +303,50 @@ Antes de hacer commit, ejecuta:
 ### Backend (Pytest)
 - ✅ **52 pruebas pasando** (100% en core y users)
 - ✅ **Cobertura**: ~21%
-- ✅ Validadores: 46/46 pasando (100%)
+- ✅ Validadores: 35/35 pasando (100%)
 - ✅ Tests de integración: 11 tests
 - ✅ Tests de permisos: 6 tests
+- ✅ **Reportes**: HTML, XML, JUnit en `test-results/`
 
 ### Frontend (Vitest)
 - ✅ **28 pruebas pasando** (100%)
 - ✅ **5 archivos de test** pasando
 - ✅ Componentes probados: Nav, Pagination, Toast, RoleGate, ConfirmDialog
 - ✅ Cobertura en aumento
+- ✅ **Reportes**: HTML, JSON, JUnit en `test-results/frontend-coverage/`
+
+### OWASP ZAP
+- ✅ **Reportes**: HTML y JSON en `test-results/security/`
+- ✅ Escaneo pasivo (baseline) configurado
+- ✅ Escaneo activo (full) configurado
 
 ### Scripts Disponibles
 - ✅ `scripts/owasp_zap_scan.sh` - Escaneo de seguridad
 
 ---
 
-**Última actualización**: 2025-11-19
+## 📄 Reportes Generados
+
+Todos los reportes se generan automáticamente en `test-results/`:
+
+### Backend
+- `test-results/report.html` - Reporte HTML completo de pruebas
+- `test-results/junit.xml` - Reporte JUnit XML
+- `test-results/coverage/index.html` - Cobertura HTML interactiva
+- `test-results/coverage.xml` - Cobertura XML
+
+### Frontend
+- `test-results/frontend-coverage/index.html` - Cobertura HTML interactiva
+- `test-results/frontend-coverage/coverage.json` - Cobertura JSON
+- `test-results/frontend-coverage/coverage-summary.json` - Resumen de cobertura
+
+### Seguridad (OWASP ZAP)
+- `test-results/security/zap-baseline.html` - Reporte HTML (baseline)
+- `test-results/security/zap-baseline.json` - Reporte JSON (baseline)
+- `test-results/security/zap-full.html` - Reporte HTML (full scan)
+- `test-results/security/zap-full.json` - Reporte JSON (full scan)
+
+---
+
+**Última actualización**: 2025-01-19
 

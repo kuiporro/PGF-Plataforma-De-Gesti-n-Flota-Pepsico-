@@ -11,6 +11,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
+      reportsDirectory: '../../test-results/frontend-coverage',
       exclude: [
         'node_modules/',
         'src/__tests__/',
@@ -21,6 +22,7 @@ export default defineConfig({
         '**/*.spec.{ts,tsx}',
       ],
     },
+    reporters: ['verbose'],
   },
   resolve: {
     alias: {

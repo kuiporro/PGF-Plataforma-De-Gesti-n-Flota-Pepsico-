@@ -59,11 +59,11 @@ class OrdenTrabajoSerializer(serializers.ModelSerializer):
         Validaciones a nivel de objeto completo.
         """
         # Validar campos obligatorios
+        # Nota: 'apertura' se genera automáticamente (auto_now_add=True), no es requerido
         campos_obligatorios = {
             'motivo': 'motivo de ingreso',
             'supervisor': 'supervisor',
-            'site': 'site',
-            'apertura': 'fecha de apertura'
+            'site': 'site'
         }
         
         for campo, nombre_display in campos_obligatorios.items():
