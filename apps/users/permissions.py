@@ -22,9 +22,12 @@ class UserPermission(BasePermission):
             return False
 
         # Restricción especial: ningún usuario puede ver/editar el usuario 'admin' excepto el propio admin
-        if obj.username == "admin" and request.user.rol != "ADMIN":
-            return False
+        # Esta verificación debe ir ANTES de cualquier otra para tener prioridad
+        if obj.username == "admin":
+            # Solo el propio admin puede ver/editar el usuario admin
+            return request.user.rol == "ADMIN" and request.user.username == "admin"
 
+        # Si no es el usuario admin, aplicar permisos normales
         if request.user.rol in ["ADMIN", "SUPERVISOR"]:
             return True
 

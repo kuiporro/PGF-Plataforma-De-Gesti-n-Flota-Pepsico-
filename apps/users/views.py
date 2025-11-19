@@ -66,16 +66,17 @@ class UserViewSet(viewsets.ModelViewSet):
         Filtra el queryset para ocultar el usuario 'admin' a todos excepto al propio admin.
         
         Reglas:
-        - Si el usuario autenticado es ADMIN: ve todos los usuarios (incluyendo admin)
-        - Si el usuario autenticado NO es ADMIN: excluye al usuario 'admin' de la lista
+        - Solo el usuario con username 'admin' puede ver al usuario 'admin' en las listas
+        - Todos los demás usuarios (incluso otros ADMIN) no verán al usuario 'admin'
         
         Retorna:
-        - QuerySet filtrado según el rol del usuario
+        - QuerySet filtrado según el usuario autenticado
         """
         queryset = super().get_queryset()
         
-        # Si el usuario autenticado no es ADMIN, excluir el usuario 'admin'
-        if self.request.user.is_authenticated and self.request.user.rol != "ADMIN":
+        # Solo el usuario con username 'admin' puede ver al usuario 'admin'
+        # Esto es más estricto que solo verificar el rol, ya que podría haber múltiples usuarios con rol ADMIN
+        if self.request.user.is_authenticated and self.request.user.username != "admin":
             queryset = queryset.exclude(username="admin")
         
         return queryset
@@ -494,16 +495,17 @@ class UsuarioListViewSet(viewsets.ReadOnlyModelViewSet):
         Filtra el queryset para ocultar el usuario 'admin' a todos excepto al propio admin.
         
         Reglas:
-        - Si el usuario autenticado es ADMIN: ve todos los usuarios (incluyendo admin)
-        - Si el usuario autenticado NO es ADMIN: excluye al usuario 'admin' de la lista
+        - Solo el usuario con username 'admin' puede ver al usuario 'admin' en las listas
+        - Todos los demás usuarios (incluso otros ADMIN) no verán al usuario 'admin'
         
         Retorna:
-        - QuerySet filtrado según el rol del usuario
+        - QuerySet filtrado según el usuario autenticado
         """
         queryset = super().get_queryset()
         
-        # Si el usuario autenticado no es ADMIN, excluir el usuario 'admin'
-        if self.request.user.is_authenticated and self.request.user.rol != "ADMIN":
+        # Solo el usuario con username 'admin' puede ver al usuario 'admin'
+        # Esto es más estricto que solo verificar el rol, ya que podría haber múltiples usuarios con rol ADMIN
+        if self.request.user.is_authenticated and self.request.user.username != "admin":
             queryset = queryset.exclude(username="admin")
         
         return queryset
