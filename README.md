@@ -33,9 +33,15 @@ Sistema completo de gestión de flota vehicular desarrollado para PepsiCo, con g
 - Estados: Activo, En Espera, En Mantenimiento, Baja
 - Tipos: Eléctrico, Diésel, Utilitario, Reparto, Ventas, Respaldo
 - Categorías: Reparto, Ventas, Respaldo
-- Ingreso y salida de vehículos al taller
+- **Ingreso y salida de vehículos al taller**
+  - Registro de ingreso rápido por patente/VIN/QR
+  - Generación automática de OT al ingresar
+  - Registro de salida con observaciones y kilometraje
+  - **Generación de ticket de ingreso en PDF**
+  - Listado de ingresos del día con filtros
 - Evidencias fotográficas (S3)
 - Historial completo de mantenimientos y backups
+- Sistema de bloqueos de vehículos
 - **Validaciones robustas**:
   - Patente única y formato válido (AA1234, AAAA12, AAAB12)
   - Datos obligatorios (patente, marca, modelo, año, tipo, site, supervisor)
@@ -48,14 +54,24 @@ Sistema completo de gestión de flota vehicular desarrollado para PepsiCo, con g
   - **ABIERTA** → **EN_DIAGNOSTICO** → **EN_EJECUCION** → **EN_PAUSA** → **EN_QA** → **CERRADA**
   - Soporte para **RETRABAJO** desde QA
 - Asignación de roles:
-  - Jefe de Taller: Realiza diagnóstico
+  - Jefe de Taller: Realiza diagnóstico, asigna mecánicos, control de calidad
   - Supervisor: Aprueba asignación y asigna mecánico
   - Mecánico: Ejecuta el trabajo
+- **Sistema de Comentarios en OT**
+  - Comentarios internos con menciones (@usuario)
+  - Respuestas a comentarios
+  - Notificaciones automáticas por menciones
+- **Timeline Consolidado**
+  - Vista unificada de cambios de estado, comentarios, evidencias, pausas
+  - Actores involucrados en la OT
+  - Historial completo de acciones
 - Pausas automáticas (colación 12:30-13:15) y manuales
 - Items de trabajo (repuestos y servicios)
 - Presupuestos con aprobaciones
 - Checklists de calidad
 - Evidencias fotográficas (hasta 3GB por archivo)
+  - **Invalidación de evidencias con versionado**
+  - Historial de versiones de evidencias
 - Auditoría completa de acciones
 - **Validaciones robustas**:
   - Vehículo debe existir
@@ -85,6 +101,10 @@ Sistema completo de gestión de flota vehicular desarrollado para PepsiCo, con g
 - Historial de asignaciones
 - Zonas y sucursales
 - KM mensual promedio
+- **Vista de chofer**: Estado actual de su vehículo asignado
+- **Seguimiento de OTs**: Ver estado de OTs de su vehículo
+- **Notificaciones**: Alertas cuando OT cambia de estado
+- **Comprobantes**: Descarga de comprobantes de ingreso/salida
 
 ### 📊 Reportes y Dashboards
 - **Dashboard Ejecutivo**: KPIs en tiempo real
@@ -318,44 +338,62 @@ La documentación interactiva está disponible en:
 
 ## 🧪 Testing
 
+### Cobertura Actual
+
+**Backend (Pytest)**:
+- ✅ **226 pruebas pasando** (73% de cobertura)
+- ✅ **Validadores**: 35/35 pasando (100%)
+- ✅ **Modelos**: 100% cubiertos
+- ✅ **Serializers**: 100% cubiertos
+- ✅ **Permisos**: 95% cubiertos
+- ⚠️ **Views**: 69% cubiertos (pendiente mejorar)
+
+**Frontend (Vitest)**:
+- ✅ **28 pruebas pasando** (componentes básicos)
+- ✅ Componentes probados: Nav, Pagination, Toast, RoleGate, ConfirmDialog
+- ⚠️ Cobertura de páginas: Pendiente (vistas nuevas creadas)
+
 ### Ejecutar Tests
 
 ```bash
-# Todas las pruebas
-docker-compose exec api poetry run pytest
+# Todas las pruebas backend
+docker-compose exec api poetry run pytest apps/ -v
 
-# Pruebas con cobertura
-docker-compose exec api poetry run pytest --cov=apps --cov-report=html
+# Pruebas con cobertura backend
+docker-compose exec api poetry run pytest apps/ --cov=apps --cov-report=html
+
+# Pruebas frontend
+docker-compose exec web sh -c "cd /app && npm run test"
+
+# Cobertura frontend
+docker-compose exec web sh -c "cd /app && npm run test:coverage"
 
 # Pruebas específicas
 docker-compose exec api poetry run pytest apps/core/tests/test_validators.py -v
-
-# Generar reportes detallados por módulo
-docker-compose exec api poetry run python scripts/run_tests_with_reports.py
 ```
 
 ### Estructura de Tests
 
 El proyecto incluye un sistema completo de pruebas:
 
-- **Validadores** (`apps/core/tests/`): Pruebas de validadores reutilizables
-- **Modelos** (`apps/*/tests/test_models.py`): Pruebas de modelos
-- **Serializers** (`apps/*/tests/test_serializers.py`): Pruebas de serializers con validaciones
-- **Views** (`apps/*/tests/test_views.py`): Pruebas de API endpoints
+- **Validadores** (`apps/core/tests/`): Pruebas de validadores reutilizables (100% cubierto)
+- **Modelos** (`apps/*/tests/test_models.py`): Pruebas de modelos (100% cubierto)
+- **Serializers** (`apps/*/tests/test_serializers.py`): Pruebas de serializers con validaciones (100% cubierto)
+- **Views** (`apps/*/tests/test_views.py`): Pruebas de API endpoints (69% cubierto)
+- **Permisos** (`apps/*/tests/test_permissions.py`): Pruebas de permisos por rol (95% cubierto)
+- **Servicios** (`apps/*/tests/test_services.py`): Pruebas de lógica de negocio
+
+### Pruebas Manuales
+
+Ver [PRUEBAS_MANUALES.md](./PRUEBAS_MANUALES.md) para el listado completo de pruebas funcionales manuales organizadas por rol (300+ pruebas).
 
 ### Reportes de Pruebas
 
-El script `scripts/run_tests_with_reports.py` genera reportes detallados por módulo:
+- **Backend**: `test-results/coverage/index.html` (cobertura HTML)
+- **Frontend**: `test-results/frontend-coverage/index.html` (cobertura HTML)
+- **Seguridad**: `test-results/security/zap-baseline.html` (OWASP ZAP)
 
-- **HTML**: Reportes visuales con resultados detallados
-- **JSON**: Datos estructurados para análisis
-- **TXT**: Logs completos de ejecución
-- **JUnit XML**: Compatible con CI/CD
-- **Cobertura**: Reportes de cobertura de código
-
-Los reportes se guardan en `test-results/reports/` organizados por módulo.
-
-Ver [scripts/README.md](./scripts/README.md) para más detalles.
+Ver [TESTING.md](./TESTING.md) para más detalles.
 
 ## 📝 Migraciones
 
@@ -425,10 +463,31 @@ Este proyecto es privado y propiedad de PepsiCo.
 
 ---
 
-**Versión**: 2.0.0  
-**Última actualización**: Noviembre 2024
+**Versión**: 2.1.0  
+**Última actualización**: Enero 2025
 
 ## 📝 Changelog
+
+### v2.1.0 (Enero 2025)
+- ✅ **Sistema de comentarios en OT** con menciones y notificaciones
+- ✅ **Timeline consolidado** de OT (cambios, comentarios, evidencias, pausas)
+- ✅ **Registro de salida de vehículos** con validaciones
+- ✅ **Sistema de tickets de ingreso** con generación PDF
+- ✅ **Invalidación de evidencias** con versionado
+- ✅ **Sistema de bloqueos de vehículos**
+- ✅ **Vistas frontend completas** para todos los roles:
+  - Guardia: Ingreso, salida, listado, tickets PDF
+  - Chofer: Mi vehículo, estado OT, timeline, notificaciones
+  - Mecánico: Mis OTs, detalle, evidencias, checklist
+  - Jefe de Taller: Dashboard, gestor, asignación, QA
+  - Supervisor: Dashboard zona, analizador, reportes
+  - Coordinador: Gestión vehículos, documentos, reportes
+  - Subgerente: Dashboard nacional, análisis, auditoría
+  - Administrador: Usuarios, configuración, integraciones
+  - Auditor: Dashboard, logs, auditoría por OT
+- ✅ **226 pruebas automatizadas** backend (73% cobertura)
+- ✅ **28 pruebas automatizadas** frontend
+- ✅ Documentación de pruebas manuales (300+ pruebas)
 
 ### v2.0.0 (Noviembre 2024)
 - ✅ Sistema completo de validaciones implementado

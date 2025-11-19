@@ -25,7 +25,7 @@ def admin_user(db):
         password="testpass123",
         rol=User.Rol.ADMIN,
         is_active=True,
-        rut="12345678-9"
+        rut="12345678-5"  # RUT válido
     )
 
 

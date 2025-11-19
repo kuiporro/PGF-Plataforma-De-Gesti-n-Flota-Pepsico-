@@ -38,6 +38,11 @@ import {
   UserGroupIcon,   // Icono de choferes
   CalendarIcon,    // Icono de agenda
   ExclamationTriangleIcon,  // Icono de emergencias
+  PhotoIcon,       // Icono de evidencias/fotos
+  CheckCircleIcon, // Icono de check/QA
+  ChartBarIcon,    // Icono de gráficos/analizador
+  CogIcon,         // Icono de configuración
+  ShieldCheckIcon, // Icono de auditoría/seguridad
 } from "@heroicons/react/24/outline";  // Iconos outline de Heroicons
 
 /**
@@ -90,6 +95,111 @@ export default function Sidebar() {
       section: "vehicles"  // Verifica con allowed("vehicles")
     },
     {
+      href: "/vehicles/ingreso",
+      label: "Registrar Ingreso",
+      icon: TruckIcon,
+      section: "vehicles",
+      roles: ["GUARDIA", "ADMIN"]  // Solo guardia y admin pueden registrar ingresos
+    },
+    {
+      href: "/vehicles/salida",
+      label: "Registrar Salida",
+      icon: TruckIcon,
+      section: "vehicles",
+      roles: ["GUARDIA", "ADMIN"]
+    },
+    {
+      href: "/vehicles/ingresos-hoy",
+      label: "Ingresos del Día",
+      icon: TruckIcon,
+      section: "vehicles",
+      roles: ["GUARDIA", "ADMIN", "SUPERVISOR"]
+    },
+    {
+      href: "/chofer",
+      label: "Mi Vehículo",
+      icon: UserIcon,
+      section: "vehicles",
+      roles: ["CHOFER"]
+    },
+    {
+      href: "/mecanico",
+      label: "Mis OTs",
+      icon: WrenchIcon,
+      section: "workorders",
+      roles: ["MECANICO"]
+    },
+    {
+      href: "/jefe-taller/dashboard",
+      label: "Dashboard Taller",
+      icon: HomeIcon,
+      section: "workorders",
+      roles: ["JEFE_TALLER", "ADMIN"]
+    },
+    {
+      href: "/jefe-taller/gestor",
+      label: "Gestor de OTs",
+      icon: WrenchIcon,
+      section: "workorders",
+      roles: ["JEFE_TALLER", "ADMIN"]
+    },
+    {
+      href: "/jefe-taller/asignacion",
+      label: "Asignar Mecánicos",
+      icon: UserGroupIcon,
+      section: "workorders",
+      roles: ["JEFE_TALLER", "ADMIN"]
+    },
+    {
+      href: "/jefe-taller/qa",
+      label: "Control de Calidad",
+      icon: CheckCircleIcon,
+      section: "workorders",
+      roles: ["JEFE_TALLER", "ADMIN"]
+    },
+    {
+      href: "/supervisor/dashboard",
+      label: "Dashboard Zona",
+      icon: HomeIcon,
+      section: "reports",
+      roles: ["SUPERVISOR", "ADMIN"]
+    },
+    {
+      href: "/supervisor/analizador",
+      label: "Analizador de OTs",
+      icon: ChartBarIcon,
+      section: "workorders",
+      roles: ["SUPERVISOR", "ADMIN"]
+    },
+    {
+      href: "/subgerente/dashboard",
+      label: "Dashboard Nacional",
+      icon: HomeIcon,
+      section: "reports",
+      roles: ["EJECUTIVO", "ADMIN"]
+    },
+    {
+      href: "/admin/configuracion",
+      label: "Configuración",
+      icon: CogIcon,
+      section: "users",
+      roles: ["ADMIN"]
+    },
+    {
+      href: "/admin/integraciones",
+      label: "Integraciones",
+      icon: CogIcon,
+      section: "users",
+      roles: ["ADMIN"]
+    },
+    {
+      href: "/auditor/dashboard",
+      label: "Auditoría",
+      icon: ShieldCheckIcon,
+      section: "reports",
+      roles: ["ADMIN"]
+    },
+    {
       href: "/workorders",
       label: "Órdenes de Trabajo",
       icon: WrenchIcon,
@@ -117,11 +227,32 @@ export default function Sidebar() {
       roles: ["ADMIN", "SUPERVISOR", "COORDINADOR_ZONA", "JEFE_TALLER"]
     },
     {
+      href: "/evidences",
+      label: "Evidencias",
+      icon: PhotoIcon,
+      section: "evidences",
+      roles: ["ADMIN", "SUPERVISOR", "MECANICO", "JEFE_TALLER"]  // Roles que pueden ver evidencias
+    },
+    {
       href: "/users",
       label: "Usuarios",
       icon: UserIcon,
       section: "users",
       roles: ["ADMIN", "SUPERVISOR"]  // Solo admin y supervisor
+    },
+    {
+      href: "/coordinador",
+      label: "Panel Coordinador",
+      icon: UserIcon,
+      section: "vehicles",
+      roles: ["COORDINADOR_ZONA", "ADMIN"]
+    },
+    {
+      href: "/subgerente/auditoria",
+      label: "Auditoría Vehículos",
+      icon: ShieldCheckIcon,
+      section: "vehicles",
+      roles: ["EJECUTIVO", "ADMIN"]
     },
   ];
 

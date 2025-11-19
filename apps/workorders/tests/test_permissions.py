@@ -1,16 +1,22 @@
 # apps/workorders/tests/test_permissions.py
 """
-Tests para los permisos de órdenes de trabajo.
+Tests para los permisos de órdenes de trabajo según nueva especificación.
 """
 
 import pytest
 from rest_framework import status
-from apps.workorders.permissions import WorkOrderPermission, ALLOWED_ROLES_READ, ALLOWED_ROLES_WRITE
+from apps.workorders.permissions import (
+    WorkOrderPermission, 
+    ALLOWED_ROLES_READ, 
+    ALLOWED_ROLES_CREATE,
+    ALLOWED_ROLES_UPDATE,
+    ALLOWED_ROLES_CLOSE
+)
 from apps.workorders.models import OrdenTrabajo
 
 
 class TestWorkOrderPermission:
-    """Tests para WorkOrderPermission"""
+    """Tests para WorkOrderPermission según nueva especificación"""
     
     @pytest.mark.permission
     def test_unauthenticated_user_denied(self, api_client):
@@ -27,11 +33,12 @@ class TestWorkOrderPermission:
         assert permission.has_permission(request, None) is True
     
     @pytest.mark.permission
-    def test_admin_can_write(self, admin_user):
-        """Test que ADMIN puede escribir"""
+    def test_admin_can_create(self, admin_user):
+        """Test que ADMIN puede crear OT"""
         permission = WorkOrderPermission()
+        view = type('View', (), {'action': 'create'})()
         request = type('Request', (), {'user': admin_user, 'method': 'POST'})()
-        assert permission.has_permission(request, None) is True
+        assert permission.has_permission(request, view) is True
     
     @pytest.mark.permission
     def test_supervisor_can_read(self, supervisor_user):
@@ -41,11 +48,12 @@ class TestWorkOrderPermission:
         assert permission.has_permission(request, None) is True
     
     @pytest.mark.permission
-    def test_supervisor_can_write(self, supervisor_user):
-        """Test que SUPERVISOR puede escribir"""
+    def test_supervisor_cannot_create(self, supervisor_user):
+        """Test que SUPERVISOR NO puede crear OT (solo JEFE_TALLER)"""
         permission = WorkOrderPermission()
+        view = type('View', (), {'action': 'create'})()
         request = type('Request', (), {'user': supervisor_user, 'method': 'POST'})()
-        assert permission.has_permission(request, None) is True
+        assert permission.has_permission(request, view) is False
     
     @pytest.mark.permission
     def test_mecanico_can_read(self, mecanico_user):
@@ -55,15 +63,16 @@ class TestWorkOrderPermission:
         assert permission.has_permission(request, None) is True
     
     @pytest.mark.permission
-    def test_mecanico_can_write(self, mecanico_user):
-        """Test que MECANICO puede escribir"""
+    def test_mecanico_cannot_create(self, mecanico_user):
+        """Test que MECANICO NO puede crear OT"""
         permission = WorkOrderPermission()
+        view = type('View', (), {'action': 'create'})()
         request = type('Request', (), {'user': mecanico_user, 'method': 'POST'})()
-        assert permission.has_permission(request, None) is True
+        assert permission.has_permission(request, view) is False
     
     @pytest.mark.permission
     def test_guardia_can_read(self, db):
-        """Test que GUARDIA puede leer"""
+        """Test que GUARDIA puede leer (solo lectura)"""
         from django.contrib.auth import get_user_model
         User = get_user_model()
         guardia = User.objects.create_user(
@@ -78,8 +87,8 @@ class TestWorkOrderPermission:
         assert permission.has_permission(request, None) is True
     
     @pytest.mark.permission
-    def test_guardia_cannot_write(self, db):
-        """Test que GUARDIA NO puede escribir"""
+    def test_guardia_cannot_create(self, db):
+        """Test que GUARDIA NO puede crear OT (solo lectura)"""
         from django.contrib.auth import get_user_model
         User = get_user_model()
         guardia = User.objects.create_user(
@@ -90,8 +99,26 @@ class TestWorkOrderPermission:
             is_active=True
         )
         permission = WorkOrderPermission()
+        view = type('View', (), {'action': 'create'})()
         request = type('Request', (), {'user': guardia, 'method': 'POST'})()
-        assert permission.has_permission(request, None) is False
+        assert permission.has_permission(request, view) is False
+    
+    @pytest.mark.permission
+    def test_jefe_taller_can_create(self, db):
+        """Test que JEFE_TALLER puede crear OT"""
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        jefe_taller = User.objects.create_user(
+            username="jefe_taller_test",
+            email="jefe_taller@test.com",
+            password="testpass123",
+            rol=User.Rol.JEFE_TALLER,
+            is_active=True
+        )
+        permission = WorkOrderPermission()
+        view = type('View', (), {'action': 'create'})()
+        request = type('Request', (), {'user': jefe_taller, 'method': 'POST'})()
+        assert permission.has_permission(request, view) is True
     
     @pytest.mark.permission
     def test_safe_methods_allowed_for_read_roles(self, supervisor_user):
@@ -103,7 +130,7 @@ class TestWorkOrderPermission:
     
     @pytest.mark.permission
     def test_unsafe_methods_require_write_role(self, db):
-        """Test que métodos no seguros requieren rol de escritura"""
+        """Test que métodos no seguros requieren rol de escritura apropiado"""
         from django.contrib.auth import get_user_model
         User = get_user_model()
         guardia = User.objects.create_user(
@@ -114,7 +141,13 @@ class TestWorkOrderPermission:
             is_active=True
         )
         permission = WorkOrderPermission()
-        for method in ['POST', 'PUT', 'PATCH', 'DELETE']:
+        # POST con action='create' NO está permitido para GUARDIA
+        view_create = type('View', (), {'action': 'create'})()
+        request_post = type('Request', (), {'user': guardia, 'method': 'POST'})()
+        assert permission.has_permission(request_post, view_create) is False
+        
+        # Otros métodos no seguros no están permitidos para GUARDIA
+        view_other = type('View', (), {'action': 'update'})()
+        for method in ['PUT', 'PATCH', 'DELETE']:
             request = type('Request', (), {'user': guardia, 'method': method})()
-            assert permission.has_permission(request, None) is False
-
+            assert permission.has_permission(request, view_other) is False

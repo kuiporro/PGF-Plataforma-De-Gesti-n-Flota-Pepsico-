@@ -44,14 +44,24 @@ export const ENDPOINTS = {
   WORK_ORDERS: `${API_BASE}/api/v1/work/ordenes/`,
   WORK_ORDERS_MOVE: (id: string, accion: string) =>
     `${API_BASE}/api/v1/work/ordenes/${id}/${accion}/`,
+  WORK_ORDERS_TIMELINE: (id: string) =>
+    `/api/proxy/work/ordenes/${id}/timeline/`,
   WORK_ITEMS: `${API_BASE}/api/v1/work/items/`,
+  WORK_COMENTARIOS: `/api/proxy/work/comentarios/`,
 
   // Evidencias
   EVIDENCES: `${API_BASE}/api/v1/work/evidencias/`,
   EVIDENCE_PRESIGN: `${API_BASE}/api/v1/work/evidencias/presigned/`,
+  EVIDENCE_INVALIDAR: (id: string) =>
+    `/api/proxy/work/evidencias/${id}/invalidar/`,
 
   // Vehicles
   VEHICLES: `${API_BASE}/api/v1/vehicles`,
+  VEHICLES_INGRESO: `/api/proxy/vehicles/ingreso/`,
+  VEHICLES_SALIDA: `/api/proxy/vehicles/salida/`,
+  VEHICLES_INGRESOS_HOY: `/api/proxy/vehicles/ingresos-hoy/`,
+  VEHICLES_TICKET_INGRESO: (ingresoId: string) => `/api/proxy/vehicles/ingreso/${ingresoId}/ticket/`,
+  VEHICLES_BLOQUEOS: `${API_BASE}/api/v1/vehicles/bloqueos/`,
   
   // Drivers (Choferes)
   DRIVERS: `${API_BASE}/api/v1/drivers/`,

@@ -42,8 +42,7 @@ class TestVehiculoModel:
                 marca="Ford",
                 modelo="Ranger",
                 anio=2021,
-                tipo_vehiculo=Vehiculo.TIPOS[0][0],
-                tipo_motor=Vehiculo.TIPOS[0][0],
+                tipo=Vehiculo.TIPOS[0][0],
                 estado=Vehiculo.ESTADOS[0][0],
                 site="SITE_TEST",
                 supervisor=supervisor_user,
@@ -102,14 +101,17 @@ class TestBackupVehiculoModel:
             estado_operativo="OPERATIVO"
         )
         
+        from django.utils import timezone
+        
         backup = BackupVehiculo.objects.create(
             vehiculo_principal=vehiculo,
             vehiculo_backup=vehiculo_backup,
             motivo="Prueba de backup",
             supervisor=supervisor_user,
-            site="SITE_TEST"
+            site="SITE_TEST",
+            fecha_inicio=timezone.now()
         )
         assert backup.vehiculo_principal == vehiculo
         assert backup.vehiculo_backup == vehiculo_backup
-        assert backup.estado == "EN_USO"
+        assert backup.estado == "ACTIVO"  # El estado por defecto es ACTIVO, no EN_USO
 

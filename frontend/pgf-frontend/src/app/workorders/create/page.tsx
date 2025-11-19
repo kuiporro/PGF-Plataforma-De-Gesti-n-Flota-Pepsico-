@@ -2,13 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ENDPOINTS } from "@/lib/constants";
 import { useToast } from "@/components/ToastContainer";
 import { validateWorkOrder } from "@/lib/validations";
+import RoleGuard from "@/components/RoleGuard";
+import { useAuth } from "@/store/auth";
 
 export default function CreateWorkOrder() {
   const router = useRouter();
   const toast = useToast();
+  const { hasRole } = useAuth();
   const [vehiculos, setVehiculos] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -123,8 +127,20 @@ export default function CreateWorkOrder() {
   // UI
   // -------------------------
   return (
-    <div className="p-8 space-y-12 max-w-3xl mx-auto">
-      <h1 className="text-3xl font-bold">Crear Orden de Trabajo</h1>
+    <RoleGuard allow={["JEFE_TALLER", "ADMIN", "GUARDIA"]}>
+      <div className="p-8 space-y-12 max-w-3xl mx-auto">
+        <div className="mb-4">
+          <h1 className="text-3xl font-bold">Crear Orden de Trabajo</h1>
+          {hasRole(["GUARDIA"]) && (
+            <div className="mt-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+              <p className="text-sm text-blue-800 dark:text-blue-300">
+                <strong>Nota para Guardia:</strong> Para crear una OT al registrar el ingreso de un vehículo, 
+                usa la opción <Link href="/vehicles/ingreso" className="underline font-medium">"Registrar Ingreso"</Link> 
+                que crea la OT automáticamente.
+              </p>
+            </div>
+          )}
+        </div>
 
       {/* Datos principales */}
       <section className="space-y-4 bg-white p-6 rounded shadow">
@@ -334,6 +350,7 @@ export default function CreateWorkOrder() {
           )}
         </button>
       </div>
-    </div>
+      </div>
+    </RoleGuard>
   );
 }

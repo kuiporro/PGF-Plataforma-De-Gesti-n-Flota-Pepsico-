@@ -156,7 +156,7 @@ export default function EditWorkOrder() {
   }
 
   return (
-    <RoleGuard allow={["ADMIN", "SUPERVISOR"]}>
+    <RoleGuard allow={["JEFE_TALLER", "ADMIN"]}>
       <div className="p-8 space-y-12 max-w-3xl mx-auto">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Editar Orden de Trabajo #{id}</h1>
 

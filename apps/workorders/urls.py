@@ -4,7 +4,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     OrdenTrabajoViewSet, ItemOTViewSet, PresupuestoViewSet, DetallePresupViewSet,
     AprobacionViewSet, PausaViewSet, ChecklistViewSet, EvidenciaViewSet,
-    PingView,   
+    ComentarioOTViewSet, PingView, timeline_ot, invalidar_evidencia
 )
 
 router = DefaultRouter()
@@ -18,7 +18,10 @@ router.register(r'aprobaciones', AprobacionViewSet, basename='aprobacion')
 router.register(r'pausas', PausaViewSet, basename='pausa')
 router.register(r'checklists', ChecklistViewSet, basename='checklist')
 router.register(r'evidencias', EvidenciaViewSet, basename='evidencia')
+router.register(r'comentarios', ComentarioOTViewSet, basename='comentario-ot')
 
 urlpatterns = router.urls + [
     path('ping/', PingView.as_view(), name='ping'),
+    path('ordenes/<uuid:ot_id>/timeline/', timeline_ot, name='timeline-ot'),
+    path('evidencias/<uuid:evidencia_id>/invalidar/', invalidar_evidencia, name='invalidar-evidencia'),
 ]

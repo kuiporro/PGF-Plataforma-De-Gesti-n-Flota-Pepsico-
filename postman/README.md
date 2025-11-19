@@ -60,7 +60,31 @@
    - Usa el ID del usuario creado
    - Verifica que retorna los datos correctos
 
-### Flujo 3: Crear Orden de Trabajo Completa
+### Flujo 3: Gestión de Vehículos - Ingreso y Salida
+
+1. **Registrar Ingreso de Vehículo**
+   - Ejecuta "3. Vehículos > Registrar Ingreso"
+   - Body: `{"patente": "ABC123", "observaciones": "Ingreso para mantención"}`
+   - Verifica que se crea `IngresoVehiculo` y `OrdenTrabajo` automáticamente
+   - Guarda `ingreso_id` y `ot_id` de la respuesta
+
+2. **Generar Ticket de Ingreso PDF**
+   - Ejecuta "3. Vehículos > Generar Ticket PDF"
+   - Usa el `ingreso_id` guardado
+   - Verifica que descarga un PDF válido con información del ingreso
+
+3. **Listar Ingresos del Día**
+   - Ejecuta "3. Vehículos > Ingresos del Día"
+   - Verifica que retorna lista de ingresos del día actual
+   - Verifica que incluye información del vehículo y OT generada
+
+4. **Registrar Salida de Vehículo**
+   - Ejecuta "3. Vehículos > Registrar Salida"
+   - Body: `{"ingreso_id": "...", "observaciones_salida": "Vehículo listo", "kilometraje_salida": 50000}`
+   - Verifica que cambia estado del vehículo a ACTIVO
+   - Verifica que `salio` se marca como `true`
+
+### Flujo 4: Crear Orden de Trabajo Completa
 
 1. **Listar Vehículos**
    - Ejecuta "3. Vehículos > Listar Vehículos"
@@ -76,7 +100,17 @@
    - Ejecuta "4. Órdenes de Trabajo > Obtener OT por ID"
    - Verifica que retorna todos los datos de la OT
 
-### Flujo 4: Subir Evidencia
+4. **Timeline de OT**
+   - Ejecuta "4. Órdenes de Trabajo > Timeline de OT"
+   - Usa el `ot_id` guardado
+   - Verifica que retorna timeline consolidado con cambios, comentarios, evidencias
+
+5. **Comentarios en OT**
+   - Ejecuta "4. Órdenes de Trabajo > Crear Comentario"
+   - Body: `{"contenido": "Comentario con @usuario mencionado", "menciones": ["@usuario"]}`
+   - Verifica que se crea comentario y notifica a usuarios mencionados
+
+### Flujo 5: Subir Evidencia
 
 1. **Obtener Presigned URL**
    - Ejecuta "5. Evidencias > Obtener Presigned URL"
@@ -94,12 +128,20 @@
 3. **Crear Evidencia**
    - Ejecuta "5. Evidencias > Crear Evidencia"
    - Verifica que se crea correctamente
+   - Guarda `evidencia_id`
 
-4. **Listar Evidencias**
+4. **Invalidar Evidencia**
+   - Ejecuta "5. Evidencias > Invalidar Evidencia"
+   - Usa el `evidencia_id` guardado
+   - Body: `{"motivo_invalidacion": "Foto borrosa, requiere retomar"}`
+   - Verifica que se marca como invalidada y se crea nueva versión
+
+5. **Listar Evidencias**
    - Ejecuta "5. Evidencias > Listar Evidencias"
    - Verifica que aparece la evidencia creada
+   - Verifica que muestra versiones si fue invalidada
 
-### Flujo 5: Generar Reportes
+### Flujo 6: Generar Reportes
 
 1. **Dashboard Ejecutivo**
    - Ejecuta "6. Reportes > Dashboard Ejecutivo"
@@ -161,10 +203,29 @@ newman run postman/PGF_API_Collection.json \
       --reporter-junit-export test-results/postman-junit.xml
 ```
 
+## 📝 Endpoints Nuevos (v2.1.0)
+
+### Vehículos
+- `POST /api/v1/vehicles/ingreso/` - Registrar ingreso de vehículo
+- `POST /api/v1/vehicles/salida/` - Registrar salida de vehículo
+- `GET /api/v1/vehicles/ingresos-hoy/` - Listar ingresos del día
+- `GET /api/v1/vehicles/ingreso/{ingreso_id}/ticket/` - Generar ticket PDF
+- `GET /api/v1/vehicles/bloqueos/` - Listar bloqueos de vehículos
+- `POST /api/v1/vehicles/bloqueos/` - Crear bloqueo de vehículo
+- `POST /api/v1/vehicles/bloqueos/{id}/resolver/` - Resolver bloqueo
+
+### Órdenes de Trabajo
+- `GET /api/v1/work/ordenes/{ot_id}/timeline/` - Timeline consolidado de OT
+- `GET /api/v1/work/comentarios/?ot={ot_id}` - Listar comentarios de OT
+- `POST /api/v1/work/comentarios/` - Crear comentario en OT
+- `POST /api/v1/work/evidencias/{id}/invalidar/` - Invalidar evidencia
+- `GET /api/v1/work/evidencias/{id}/` - Ver evidencia con versiones
+
 ## 📝 Notas
 
 - Los tokens JWT expiran en 1 hora por defecto
 - Algunos endpoints requieren roles específicos
 - Las variables se actualizan automáticamente con scripts de test
 - Para pruebas de carga, usa Postman Runner con múltiples iteraciones
+- **Nuevos endpoints**: Ingreso/salida vehículos, timeline, comentarios, invalidación de evidencias
 

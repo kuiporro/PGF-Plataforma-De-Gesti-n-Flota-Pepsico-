@@ -289,10 +289,12 @@ src/
 
 Antes de hacer commit, ejecuta:
 
-- [ ] Pruebas backend: `docker compose exec api poetry run pytest apps/ -v`
-- [ ] Pruebas frontend: `docker compose exec web sh -c "cd /app && npm run test"`
-- [ ] Cobertura backend > 20%: `docker compose exec api poetry run pytest apps/ --cov=apps --cov-report=term-missing`
+- [ ] Pruebas backend: `docker compose exec api poetry run pytest apps/ -v` (226 tests)
+- [ ] Pruebas frontend: `docker compose exec web sh -c "cd /app && npm run test"` (28 tests)
+- [ ] Cobertura backend > 70%: `docker compose exec api poetry run pytest apps/ --cov=apps --cov-report=term-missing` (actual: 73%)
+- [ ] Pruebas manuales: Ejecutar pruebas críticas según [PRUEBAS_MANUALES.md](./PRUEBAS_MANUALES.md)
 - [ ] Sin errores de linting
+- [ ] Postman: Verificar nuevos endpoints (ingreso, salida, timeline, comentarios)
 
 ---
 
@@ -301,24 +303,32 @@ Antes de hacer commit, ejecuta:
 ## 📊 Estado Actual de Pruebas
 
 ### Backend (Pytest)
-- ✅ **52 pruebas pasando** (100% en core y users)
-- ✅ **Cobertura**: ~21%
-- ✅ Validadores: 35/35 pasando (100%)
+- ✅ **226 pruebas pasando** (73% de cobertura)
+- ✅ **Validadores**: 35/35 pasando (100% cubierto)
+- ✅ **Modelos**: 100% cubiertos (User, Vehiculo, OrdenTrabajo, Pausa, ComentarioOT, VersionEvidencia)
+- ✅ **Serializers**: 100% cubiertos (validaciones completas)
+- ✅ **Permisos**: 95% cubiertos (WorkOrderPermission, VehiclePermission)
+- ✅ **Views**: 69% cubiertos (pendiente mejorar cobertura)
+- ✅ **Servicios**: 100% cubiertos (transiciones de estado)
 - ✅ Tests de integración: 11 tests
-- ✅ Tests de permisos: 6 tests
 - ✅ **Reportes**: HTML, XML, JUnit en `test-results/`
 
 ### Frontend (Vitest)
 - ✅ **28 pruebas pasando** (100%)
 - ✅ **5 archivos de test** pasando
 - ✅ Componentes probados: Nav, Pagination, Toast, RoleGate, ConfirmDialog
-- ✅ Cobertura en aumento
+- ⚠️ **Cobertura de páginas**: Pendiente (vistas nuevas creadas)
 - ✅ **Reportes**: HTML, JSON, JUnit en `test-results/frontend-coverage/`
 
 ### OWASP ZAP
 - ✅ **Reportes**: HTML y JSON en `test-results/security/`
 - ✅ Escaneo pasivo (baseline) configurado
 - ✅ Escaneo activo (full) configurado
+
+### Pruebas Manuales
+- ✅ **300+ pruebas funcionales** documentadas en [PRUEBAS_MANUALES.md](./PRUEBAS_MANUALES.md)
+- ✅ Organizadas por rol (Guardia, Chofer, Mecánico, Jefe de Taller, etc.)
+- ✅ Incluye pruebas críticas, importantes y opcionales
 
 ### Scripts Disponibles
 - ✅ `scripts/owasp_zap_scan.sh` - Escaneo de seguridad

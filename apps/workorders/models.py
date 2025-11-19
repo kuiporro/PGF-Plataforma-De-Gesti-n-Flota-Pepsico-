@@ -142,6 +142,16 @@ class OrdenTrabajo(models.Model):
         help_text="Responsable general (puede ser supervisor o mecánico)"
     )
     
+    # Chofer: Chofer que ingresa el vehículo (registrado por el guardia)
+    chofer = models.ForeignKey(
+        "drivers.Chofer",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ots_creadas",
+        help_text="Chofer que ingresa el vehículo"
+    )
+    
     # ==================== ESTADO Y CLASIFICACIÓN ====================
     
     # Estado actual de la OT
@@ -712,6 +722,18 @@ class Evidencia(models.Model):
     
     # Fecha de subida
     subido_en = models.DateTimeField(auto_now_add=True)
+    
+    # Campos de invalidación
+    invalidado = models.BooleanField(default=False, help_text="Indica si la evidencia fue invalidada")
+    invalidado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="evidencias_invalidadas"
+    )
+    invalidado_en = models.DateTimeField(null=True, blank=True)
+    motivo_invalidacion = models.TextField(blank=True, help_text="Motivo de invalidación")
 
 
 class Auditoria(models.Model):
@@ -789,3 +811,193 @@ class Auditoria(models.Model):
         Ejemplo: "2024-01-15 10:30:00 CERRAR_OT OrdenTrabajo:abc123"
         """
         return f"{self.ts} {self.accion} {self.objeto_tipo}:{self.objeto_id}"
+
+
+class ComentarioOT(models.Model):
+    """
+    Comentarios internos en una Orden de Trabajo.
+    
+    Permite comunicación entre usuarios (mecánico, supervisor, jefe de taller, etc.)
+    dentro del contexto de una OT. Soporta menciones de usuarios.
+    
+    Relaciones:
+    - ForeignKey a OrdenTrabajo (ot.comentarios.all())
+    - ForeignKey a User (usuario que crea el comentario)
+    - ForeignKey a ComentarioOT (comentario padre, para respuestas)
+    """
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    # OT a la que pertenece el comentario
+    ot = models.ForeignKey(
+        OrdenTrabajo,
+        on_delete=models.CASCADE,
+        related_name="comentarios"
+    )
+    
+    # Usuario que crea el comentario
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="comentarios_ot"
+    )
+    
+    # Comentario padre (si es una respuesta)
+    comentario_padre = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="respuestas"
+    )
+    
+    # Contenido del comentario
+    contenido = models.TextField()
+    
+    # Menciones de usuarios (almacenadas como lista de IDs en JSON)
+    # Ejemplo: ["@jefetaller", "@mecanico123"]
+    menciones = models.JSONField(default=list, blank=True)
+    
+    # Indica si el comentario fue editado
+    editado = models.BooleanField(default=False)
+    
+    # Fecha de creación
+    creado_en = models.DateTimeField(auto_now_add=True)
+    
+    # Fecha de última edición
+    editado_en = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=["ot", "creado_en"]),
+            models.Index(fields=["usuario", "creado_en"]),
+        ]
+        ordering = ["creado_en"]
+    
+    def __str__(self):
+        return f"Comentario en OT {self.ot.id} por {self.usuario.username if self.usuario else 'Sistema'}"
+
+
+class BloqueoVehiculo(models.Model):
+    """
+    Bloqueos o restricciones de vehículos.
+    
+    Permite marcar vehículos con bloqueos que impiden su ingreso al taller
+    o generan alertas especiales.
+    
+    Relaciones:
+    - ForeignKey a Vehiculo (vehiculo.bloqueos.all())
+    - ForeignKey a User (usuario que crea el bloqueo)
+    """
+    
+    TIPOS_BLOQUEO = (
+        ("PENDIENTE_PAGO", "Pendiente de Pago"),
+        ("DOCUMENTACION_INCOMPLETA", "Documentación Incompleta"),
+        ("SANCION", "Sanción"),
+        ("MANTENIMIENTO_OBLIGATORIO", "Mantenimiento Obligatorio"),
+        ("OTRO", "Otro"),
+    )
+    
+    ESTADOS = (
+        ("ACTIVO", "Activo"),
+        ("RESUELTO", "Resuelto"),
+        ("CANCELADO", "Cancelado"),
+    )
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    # Vehículo bloqueado
+    vehiculo = models.ForeignKey(
+        Vehiculo,
+        on_delete=models.CASCADE,
+        related_name="bloqueos"
+    )
+    
+    # Usuario que crea el bloqueo
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bloqueos_creados"
+    )
+    
+    # Tipo de bloqueo
+    tipo = models.CharField(max_length=50, choices=TIPOS_BLOQUEO)
+    
+    # Estado del bloqueo
+    estado = models.CharField(max_length=20, choices=ESTADOS, default="ACTIVO")
+    
+    # Motivo del bloqueo
+    motivo = models.TextField()
+    
+    # Fecha de creación
+    creado_en = models.DateTimeField(auto_now_add=True)
+    
+    # Fecha de resolución
+    resuelto_en = models.DateTimeField(null=True, blank=True)
+    
+    # Usuario que resuelve el bloqueo
+    resuelto_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bloqueos_resueltos"
+    )
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=["vehiculo", "estado"]),
+            models.Index(fields=["estado", "creado_en"]),
+        ]
+        ordering = ["-creado_en"]
+    
+    def __str__(self):
+        return f"Bloqueo {self.tipo} - {self.vehiculo.patente}"
+
+
+class VersionEvidencia(models.Model):
+    """
+    Historial de versiones de evidencias.
+    
+    Cuando una evidencia es invalidada, se crea una nueva versión
+    manteniendo el historial completo.
+    """
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    # Evidencia original
+    evidencia_original = models.ForeignKey(
+        Evidencia,
+        on_delete=models.CASCADE,
+        related_name="versiones"
+    )
+    
+    # URL de la versión anterior (antes de invalidar)
+    url_anterior = models.URLField()
+    
+    # Usuario que invalidó la evidencia
+    invalidado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+    
+    # Motivo de invalidación
+    motivo = models.TextField()
+    
+    # Fecha de invalidación
+    invalidado_en = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=["evidencia_original", "invalidado_en"]),
+        ]
+        ordering = ["-invalidado_en"]
+    
+    def __str__(self):
+        return f"Versión invalidada de evidencia {self.evidencia_original.id}"

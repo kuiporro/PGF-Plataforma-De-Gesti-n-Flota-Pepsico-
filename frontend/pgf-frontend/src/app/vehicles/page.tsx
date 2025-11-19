@@ -54,21 +54,32 @@ export default function VehiclesPage() {
     load(currentPage);
   }, [currentPage]);
 
-  const canEdit = hasRole(["ADMIN", "SUPERVISOR"]);
+  const canEdit = hasRole(["ADMIN", "SUPERVISOR", "COORDINADOR_ZONA"]);
+  const isGuardia = hasRole(["GUARDIA"]);
 
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Vehículos</h1>
-        {canEdit && (
-          <Link 
-            href="/vehicles/create" 
-            className="px-4 py-2 text-white rounded-lg transition-colors font-medium shadow-sm hover:shadow"
-            style={{ backgroundColor: '#003DA5' }}
-          >
-            + Nuevo Vehículo
-          </Link>
-        )}
+        <div className="flex gap-3">
+          {isGuardia && (
+            <Link 
+              href="/vehicles/ingreso" 
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors font-medium shadow-sm hover:shadow"
+            >
+              📥 Registrar Ingreso
+            </Link>
+          )}
+          {canEdit && (
+            <Link 
+              href="/vehicles/create" 
+              className="px-4 py-2 text-white rounded-lg transition-colors font-medium shadow-sm hover:shadow"
+              style={{ backgroundColor: '#003DA5' }}
+            >
+              + Nuevo Vehículo
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">

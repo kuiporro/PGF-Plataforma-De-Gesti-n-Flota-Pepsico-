@@ -22,7 +22,7 @@ class TestUserSerializer:
             "email": "test@example.com",
             "password": "testpass123",
             "rol": "ADMIN",
-            "rut": "12345678-9"
+            "rut": "12345678-5"  # RUT válido
         }
         serializer = UserSerializer(data=data)
         assert serializer.is_valid() is True
@@ -75,7 +75,7 @@ class TestUserSerializer:
             username="user1",
             email="user1@example.com",
             password="testpass123",
-            rut="12345678-9"
+            rut="12345678-5"  # RUT válido
         )
         
         data = {
@@ -83,7 +83,7 @@ class TestUserSerializer:
             "email": "user2@example.com",
             "password": "testpass123",
             "rol": "ADMIN",
-            "rut": "12345678-9"
+            "rut": "12345678-5"  # RUT duplicado
         }
         serializer = UserSerializer(data=data)
         assert serializer.is_valid() is False

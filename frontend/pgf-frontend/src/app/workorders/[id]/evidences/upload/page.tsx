@@ -5,6 +5,8 @@ import { ENDPOINTS } from "@/lib/constants";
 import { withSession } from "@/lib/api.client";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ToastContainer";
+import { useAuth } from "@/store/auth";
+import RoleGuard from "@/components/RoleGuard";
 
 /**
  * Componente para subir evidencias a una Orden de Trabajo.
@@ -27,6 +29,10 @@ export default function UploadEvidence({ params }: any) {
   const otId = params.id;
   const router = useRouter();
   const toast = useToast();
+  const { hasRole } = useAuth();
+
+  // Solo MECANICO y JEFE_TALLER pueden subir evidencias
+  const canUpload = hasRole(["MECANICO", "JEFE_TALLER", "ADMIN"]);
 
   const [file, setFile] = useState<File | null>(null);
   const [descripcion, setDescripcion] = useState("");
@@ -216,8 +222,9 @@ export default function UploadEvidence({ params }: any) {
   };
 
   return (
-    <div className="p-6 max-w-2xl mx-auto space-y-6">
-      <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Subir Evidencia</h1>
+    <RoleGuard allow={["MECANICO", "JEFE_TALLER", "ADMIN"]}>
+      <div className="p-6 max-w-2xl mx-auto space-y-6">
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Subir Evidencia</h1>
 
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 space-y-6">
         <div>
@@ -335,6 +342,7 @@ export default function UploadEvidence({ params }: any) {
           </button>
         </div>
       </div>
-    </div>
+      </div>
+    </RoleGuard>
   );
 }

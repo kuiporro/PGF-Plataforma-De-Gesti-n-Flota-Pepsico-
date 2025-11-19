@@ -315,14 +315,35 @@ class IngresoVehiculo(models.Model):
     # Fecha/hora de ingreso (automática al crear)
     fecha_ingreso = models.DateTimeField(auto_now_add=True)
     
+    # Fecha/hora de salida (se establece al registrar salida)
+    fecha_salida = models.DateTimeField(null=True, blank=True)
+    
+    # Guardia que registra la salida
+    guardia_salida = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="salidas_registradas"
+    )
+    
     # Observaciones del ingreso
     observaciones = models.TextField(blank=True)
+    
+    # Observaciones de la salida
+    observaciones_salida = models.TextField(blank=True)
     
     # Kilometraje al momento del ingreso
     kilometraje = models.PositiveIntegerField(null=True, blank=True)
     
+    # Kilometraje al momento de la salida
+    kilometraje_salida = models.PositiveIntegerField(null=True, blank=True)
+    
     # Código QR opcional para escaneo
     qr_code = models.CharField(max_length=255, blank=True)
+    
+    # Indica si el vehículo ya salió del taller
+    salio = models.BooleanField(default=False)
     
     class Meta:
         """

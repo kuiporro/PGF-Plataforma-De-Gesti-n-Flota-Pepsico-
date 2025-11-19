@@ -1,7 +1,8 @@
 # apps/workorders/serializers.py
 from rest_framework import serializers
 from .models import (OrdenTrabajo, ItemOT, Presupuesto, DetallePresup,
-                    Aprobacion, Pausa, Checklist, Evidencia)
+                    Aprobacion, Pausa, Checklist, Evidencia, ComentarioOT,
+                    BloqueoVehiculo, VersionEvidencia)
 from decimal import Decimal
 
 # --- PRIMERO DEFINIMOS LOS SERIALIZERS BÁSICOS ---
@@ -60,9 +61,9 @@ class OrdenTrabajoSerializer(serializers.ModelSerializer):
         """
         # Validar campos obligatorios
         # Nota: 'apertura' se genera automáticamente (auto_now_add=True), no es requerido
+        # Nota: 'supervisor' no es obligatorio al crear (el guardia puede crear OT sin supervisor)
         campos_obligatorios = {
             'motivo': 'motivo de ingreso',
-            'supervisor': 'supervisor',
             'site': 'site'
         }
         
@@ -115,6 +116,11 @@ class PresupuestoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Presupuesto
         fields = '__all__'
+    
+    def create(self, validated_data):
+        """Excluir detalles_data de validated_data antes de crear el objeto"""
+        validated_data.pop('detalles_data', None)
+        return super().create(validated_data)
 
 # --- Y FINALMENTE, EL RESTO DE SERIALIZERS SIMPLES ---
 
@@ -162,9 +168,72 @@ class ChecklistSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 class EvidenciaSerializer(serializers.ModelSerializer):
+    invalidado = serializers.BooleanField(read_only=True)
+    invalidado_por_nombre = serializers.CharField(source="invalidado_por.get_full_name", read_only=True)
+    invalidado_en = serializers.DateTimeField(read_only=True)
+    
     class Meta:
         model = Evidencia
         fields = "__all__"
+
+
+class ComentarioOTSerializer(serializers.ModelSerializer):
+    """
+    Serializer para comentarios en OT.
+    
+    Soporta:
+    - Creación de comentarios
+    - Respuestas a comentarios (comentario_padre)
+    - Menciones de usuarios
+    - Edición de comentarios
+    """
+    usuario_nombre = serializers.CharField(source="usuario.get_full_name", read_only=True)
+    usuario_username = serializers.CharField(source="usuario.username", read_only=True)
+    usuario_rol = serializers.CharField(source="usuario.rol", read_only=True)
+    respuestas = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = ComentarioOT
+        fields = "__all__"
+        read_only_fields = ["editado", "editado_en", "creado_en"]
+    
+    def get_respuestas(self, obj):
+        """Obtiene las respuestas de un comentario."""
+        respuestas = obj.respuestas.all().order_by("creado_en")
+        return ComentarioOTSerializer(respuestas, many=True).data
+    
+    def validate(self, attrs):
+        """Validar que el contenido no esté vacío."""
+        contenido = attrs.get("contenido", "").strip()
+        if not contenido:
+            raise serializers.ValidationError({"contenido": "El comentario no puede estar vacío."})
+        return attrs
+
+
+class BloqueoVehiculoSerializer(serializers.ModelSerializer):
+    """
+    Serializer para bloqueos de vehículos.
+    """
+    creado_por_nombre = serializers.CharField(source="creado_por.get_full_name", read_only=True)
+    resuelto_por_nombre = serializers.CharField(source="resuelto_por.get_full_name", read_only=True)
+    vehiculo_patente = serializers.CharField(source="vehiculo.patente", read_only=True)
+    
+    class Meta:
+        model = BloqueoVehiculo
+        fields = "__all__"
+        read_only_fields = ["creado_en", "resuelto_en"]
+
+
+class VersionEvidenciaSerializer(serializers.ModelSerializer):
+    """
+    Serializer para versiones de evidencias invalidadas.
+    """
+    invalidado_por_nombre = serializers.CharField(source="invalidado_por.get_full_name", read_only=True)
+    
+    class Meta:
+        model = VersionEvidencia
+        fields = "__all__"
+        read_only_fields = ["invalidado_en"]
 
 
 class OrdenTrabajoListSerializer(serializers.ModelSerializer):

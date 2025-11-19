@@ -16,6 +16,172 @@ from datetime import timedelta
 # No importar views aquí para evitar circular imports
 
 
+def generar_ticket_ingreso_pdf(ingreso_id: str):
+    """
+    Genera un PDF del ticket de ingreso de vehículo al taller.
+    
+    Args:
+        ingreso_id: UUID del IngresoVehiculo
+        
+    Returns:
+        BytesIO: Buffer con el PDF generado
+    """
+    from apps.vehicles.models import IngresoVehiculo
+    
+    # Obtener el ingreso con relaciones
+    try:
+        ingreso = IngresoVehiculo.objects.select_related(
+            'vehiculo', 'guardia', 'guardia_salida'
+        ).prefetch_related('evidencias').get(id=ingreso_id)
+    except IngresoVehiculo.DoesNotExist:
+        raise ValueError(f"Ingreso con ID {ingreso_id} no encontrado")
+    
+    # Crear buffer para el PDF
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, 
+        pagesize=A4, 
+        rightMargin=30, 
+        leftMargin=30, 
+        topMargin=30, 
+        bottomMargin=30
+    )
+    
+    # Contenedor para elementos del PDF
+    elements = []
+    
+    # Estilos
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=colors.HexColor('#003DA5'),  # Azul PepsiCo
+        spaceAfter=30,
+        alignment=TA_CENTER
+    )
+    
+    heading_style = ParagraphStyle(
+        'CustomHeading',
+        parent=styles['Heading2'],
+        fontSize=16,
+        textColor=colors.HexColor('#003DA5'),
+        spaceAfter=12,
+        spaceBefore=12
+    )
+    
+    # Título
+    elements.append(Paragraph("TICKET DE INGRESO AL TALLER", title_style))
+    elements.append(Paragraph("PepsiCo Chile - Sistema PGF", styles['Normal']))
+    elements.append(Spacer(1, 0.3*inch))
+    
+    # Información del vehículo
+    vehiculo = ingreso.vehiculo
+    elements.append(Paragraph("INFORMACIÓN DEL VEHÍCULO", heading_style))
+    
+    vehiculo_data = [
+        ["Patente:", vehiculo.patente],
+        ["Marca:", vehiculo.marca or "N/A"],
+        ["Modelo:", vehiculo.modelo or "N/A"],
+        ["Año:", str(vehiculo.anio) if vehiculo.anio else "N/A"],
+        ["VIN:", vehiculo.vin or "N/A"],
+        ["Tipo:", vehiculo.tipo or "N/A"],
+        ["Kilometraje al ingreso:", f"{ingreso.kilometraje:,} km" if ingreso.kilometraje else "N/A"],
+    ]
+    
+    vehiculo_table = Table(vehiculo_data, colWidths=[2*inch, 4*inch])
+    vehiculo_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.grey),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+        ('BACKGROUND', (1, 0), (1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    elements.append(vehiculo_table)
+    elements.append(Spacer(1, 0.2*inch))
+    
+    # Información del ingreso
+    elements.append(Paragraph("INFORMACIÓN DEL INGRESO", heading_style))
+    
+    ingreso_data = [
+        ["Número de Ticket:", str(ingreso.id)[:8].upper()],
+        ["Fecha y Hora:", ingreso.fecha_ingreso.strftime("%d/%m/%Y %H:%M:%S")],
+        ["Registrado por:", ingreso.guardia.get_full_name() or ingreso.guardia.username],
+        ["QR Code:", ingreso.qr_code or "N/A"],
+    ]
+    
+    if ingreso.observaciones:
+        ingreso_data.append(["Observaciones:", ingreso.observaciones])
+    
+    ingreso_table = Table(ingreso_data, colWidths=[2*inch, 4*inch])
+    ingreso_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.grey),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+        ('BACKGROUND', (1, 0), (1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+    ]))
+    elements.append(ingreso_table)
+    elements.append(Spacer(1, 0.2*inch))
+    
+    # Información de OT generada (si existe)
+    from apps.workorders.models import OrdenTrabajo
+    ot = OrdenTrabajo.objects.filter(
+        vehiculo=vehiculo,
+        apertura__gte=ingreso.fecha_ingreso - timedelta(minutes=5)
+    ).first()
+    
+    if ot:
+        elements.append(Paragraph("ORDEN DE TRABAJO GENERADA", heading_style))
+        ot_data = [
+            ["Número OT:", str(ot.id)[:8].upper()],
+            ["Estado:", ot.estado],
+            ["Tipo:", ot.tipo or "N/A"],
+            ["Motivo:", ot.motivo or "N/A"],
+            ["Prioridad:", ot.prioridad or "MEDIA"],
+        ]
+        
+        ot_table = Table(ot_data, colWidths=[2*inch, 4*inch])
+        ot_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), colors.lightblue),
+            ('TEXTCOLOR', (0, 0), (0, -1), colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+            ('BACKGROUND', (1, 0), (1, -1), colors.lightgrey),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        elements.append(ot_table)
+        elements.append(Spacer(1, 0.2*inch))
+    
+    # Pie de página
+    elements.append(Spacer(1, 0.3*inch))
+    elements.append(Paragraph(
+        f"Generado el {timezone.now().strftime('%d/%m/%Y %H:%M:%S')}",
+        ParagraphStyle(
+            'Footer',
+            parent=styles['Normal'],
+            fontSize=8,
+            textColor=colors.grey,
+            alignment=TA_CENTER
+        )
+    ))
+    
+    # Construir PDF
+    doc.build(elements)
+    
+    # Retornar buffer
+    buffer.seek(0)
+    return buffer
+
+
 def generar_reporte_semanal_pdf(fecha_inicio=None, fecha_fin=None):
     """
     Genera un reporte semanal en PDF con productividad del taller

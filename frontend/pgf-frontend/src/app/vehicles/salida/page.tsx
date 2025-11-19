@@ -1,0 +1,288 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useToast } from "@/components/ToastContainer";
+import { useAuth } from "@/store/auth";
+import RoleGuard from "@/components/RoleGuard";
+import Link from "next/link";
+import { ENDPOINTS } from "@/lib/constants";
+import { withSession } from "@/lib/api.client";
+
+/**
+ * Página para que el Guardia registre la salida de vehículos del taller.
+ * 
+ * Esta página permite:
+ * - Ver lista de vehículos ingresados hoy
+ * - Registrar salida de un vehículo
+ * - Validar que todas las OTs estén cerradas
+ * - Generar comprobante de salida
+ * 
+ * Permisos:
+ * - Solo GUARDIA puede acceder
+ */
+export default function SalidaVehiculoPage() {
+  const router = useRouter();
+  const toast = useToast();
+  const { hasRole } = useAuth();
+
+  const [ingresos, setIngresos] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingList, setLoadingList] = useState(true);
+  const [selectedIngreso, setSelectedIngreso] = useState<string | null>(null);
+  const [form, setForm] = useState({
+    observaciones_salida: "",
+    kilometraje_salida: "",
+  });
+
+  const canAccess = hasRole(["GUARDIA", "ADMIN"]);
+
+  useEffect(() => {
+    if (canAccess) {
+      cargarIngresos();
+    }
+  }, [canAccess]);
+
+  const cargarIngresos = async () => {
+    setLoadingList(true);
+    try {
+      const response = await fetch(ENDPOINTS.VEHICLES_INGRESOS_HOY, {
+        method: "GET",
+        ...withSession(),
+      });
+
+      if (!response.ok) {
+        throw new Error("Error al cargar ingresos");
+      }
+
+      const data = await response.json();
+      // Filtrar solo los que no han salido
+      const ingresosPendientes = data.ingresos.filter((ing: any) => !ing.salio);
+      setIngresos(ingresosPendientes);
+    } catch (error) {
+      console.error("Error al cargar ingresos:", error);
+      toast.error("Error al cargar la lista de ingresos");
+    } finally {
+      setLoadingList(false);
+    }
+  };
+
+  const handleChange = (field: string, value: any) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleRegistrarSalida = async (ingresoId: string) => {
+    setLoading(true);
+
+    try {
+      const response = await fetch(ENDPOINTS.VEHICLES_SALIDA, {
+        method: "POST",
+        ...withSession(),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ingreso_id: ingresoId,
+          observaciones_salida: form.observaciones_salida.trim() || undefined,
+          kilometraje_salida: form.kilometraje_salida ? parseInt(form.kilometraje_salida) : undefined,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast.error(data.detail || "Error al registrar salida");
+        setLoading(false);
+        return;
+      }
+
+      toast.success("Salida registrada correctamente");
+      
+      // Limpiar formulario
+      setForm({
+        observaciones_salida: "",
+        kilometraje_salida: "",
+      });
+      setSelectedIngreso(null);
+
+      // Recargar lista
+      await cargarIngresos();
+    } catch (error) {
+      console.error("Error al registrar salida:", error);
+      toast.error("Error al registrar la salida del vehículo");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!canAccess) {
+    return (
+      <RoleGuard allow={["GUARDIA", "ADMIN"]}>
+        <div></div>
+      </RoleGuard>
+    );
+  }
+
+  return (
+    <RoleGuard allow={["GUARDIA", "ADMIN"]}>
+      <div className="p-6 max-w-6xl mx-auto space-y-6">
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+            Registrar Salida de Vehículo
+          </h1>
+          <div className="flex gap-2">
+            <Link
+              href="/vehicles/ingreso"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
+            >
+              Registrar Ingreso
+            </Link>
+            <Link
+              href="/vehicles/ingresos-hoy"
+              className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium"
+            >
+              Ver Lista del Día
+            </Link>
+            <Link
+              href="/vehicles"
+              className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium"
+            >
+              ← Volver
+            </Link>
+          </div>
+        </div>
+
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-6">
+          <p className="text-sm text-yellow-800 dark:text-yellow-300">
+            <strong>Importante:</strong> Solo se puede registrar la salida de vehículos que tienen 
+            todas sus OTs cerradas. Verifique el estado de las OTs antes de registrar la salida.
+          </p>
+        </div>
+
+        {/* Lista de Ingresos Pendientes */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+              Vehículos Ingresados Hoy (Pendientes de Salida)
+            </h2>
+          </div>
+
+          {loadingList ? (
+            <div className="p-6 text-center">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
+              <p className="mt-4 text-gray-600 dark:text-gray-400">Cargando ingresos...</p>
+            </div>
+          ) : ingresos.length === 0 ? (
+            <div className="p-6 text-center text-gray-500 dark:text-gray-400">
+              No hay vehículos pendientes de salida hoy.
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-200 dark:divide-gray-700">
+              {ingresos.map((ingreso) => (
+                <div
+                  key={ingreso.id}
+                  className="p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-4 mb-2">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                          {ingreso.vehiculo?.patente || "N/A"}
+                        </h3>
+                        <span className="px-2 py-1 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 rounded">
+                          Ingreso: {new Date(ingreso.fecha_ingreso).toLocaleTimeString()}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600 dark:text-gray-400">
+                        <div>
+                          <span className="font-medium">Marca:</span> {ingreso.vehiculo?.marca || "N/A"}
+                        </div>
+                        <div>
+                          <span className="font-medium">Modelo:</span> {ingreso.vehiculo?.modelo || "N/A"}
+                        </div>
+                        <div>
+                          <span className="font-medium">Kilometraje Ingreso:</span> {ingreso.kilometraje || "N/A"}
+                        </div>
+                        <div>
+                          <span className="font-medium">Guardia:</span> {ingreso.guardia?.username || "N/A"}
+                        </div>
+                      </div>
+                      {ingreso.observaciones && (
+                        <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                          <span className="font-medium">Observaciones:</span> {ingreso.observaciones}
+                        </p>
+                      )}
+                    </div>
+                    <div className="ml-4">
+                      <button
+                        onClick={() => setSelectedIngreso(selectedIngreso === ingreso.id ? null : ingreso.id)}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
+                      >
+                        {selectedIngreso === ingreso.id ? "Cancelar" : "Registrar Salida"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Formulario de Salida (expandible) */}
+                  {selectedIngreso === ingreso.id && (
+                    <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+                      <h4 className="font-semibold text-gray-900 dark:text-white mb-4">
+                        Información de Salida
+                      </h4>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Observaciones de Salida
+                          </label>
+                          <textarea
+                            value={form.observaciones_salida}
+                            onChange={(e) => handleChange("observaciones_salida", e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                            rows={3}
+                            placeholder="Observaciones sobre la salida del vehículo..."
+                          />
+                        </div>
+                        <div>
+                          <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Kilometraje de Salida
+                          </label>
+                          <input
+                            type="number"
+                            value={form.kilometraje_salida}
+                            onChange={(e) => handleChange("kilometraje_salida", e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                            placeholder="50000"
+                            min="0"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleRegistrarSalida(ingreso.id)}
+                            disabled={loading}
+                            className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {loading ? "Registrando..." : "Confirmar Salida"}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedIngreso(null);
+                              setForm({ observaciones_salida: "", kilometraje_salida: "" });
+                            }}
+                            className="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors font-medium"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </RoleGuard>
+  );
+}
+

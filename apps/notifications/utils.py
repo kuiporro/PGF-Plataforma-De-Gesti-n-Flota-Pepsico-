@@ -242,6 +242,58 @@ def crear_notificacion_ot_creada(ot, usuario_creo):
     return notificaciones
 
 
+def crear_notificacion_ot_comentario(comentario, menciones):
+    """
+    Crea notificaciones cuando se agrega un comentario con menciones.
+    
+    Notifica a los usuarios mencionados en el comentario.
+    """
+    notificaciones = []
+    
+    for mencion in menciones:
+        # Extraer ID de usuario de la mención (formato: @username o @id)
+        # Por ahora, asumimos que las menciones son IDs de usuario
+        try:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            
+            # Intentar obtener usuario por ID o username
+            if mencion.startswith("@"):
+                mencion = mencion[1:]  # Remover @
+            
+            usuario = None
+            try:
+                # Intentar por ID primero
+                usuario = User.objects.get(id=mencion)
+            except (User.DoesNotExist, ValueError):
+                try:
+                    # Intentar por username
+                    usuario = User.objects.get(username=mencion)
+                except User.DoesNotExist:
+                    pass
+            
+            if usuario and usuario != comentario.usuario:
+                notificacion = Notification.objects.create(
+                    usuario=usuario,
+                    tipo="GENERAL",
+                    titulo=f"Nueva mención en OT {comentario.ot.id}",
+                    mensaje=f"{comentario.usuario.get_full_name() if comentario.usuario else 'Usuario'} te mencionó en un comentario: {comentario.contenido[:100]}",
+                    ot=comentario.ot,
+                    metadata={
+                        "comentario_id": str(comentario.id),
+                        "usuario_comentario": comentario.usuario.username if comentario.usuario else None,
+                    }
+                )
+                notificaciones.append(notificacion)
+                enviar_notificacion_websocket(notificacion)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error al crear notificación de mención {mencion}: {e}")
+    
+    return notificaciones
+
+
 def crear_notificacion_ot_cerrada(ot, usuario_cerro):
     """
     Crea notificaciones cuando se cierra una OT.

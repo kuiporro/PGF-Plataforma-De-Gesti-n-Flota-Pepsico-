@@ -158,11 +158,12 @@ export default function WorkOrdersPage() {
   }, [currentPage]);
 
   /**
-   * Verificar si el usuario puede editar OT.
-   * 
-   * Solo ADMIN y SUPERVISOR pueden editar/eliminar.
+   * Verificar permisos según nueva especificación:
+   * - Crear OT: JEFE_TALLER, ADMIN y GUARDIA (a través del flujo de ingreso)
+   * - Editar OT: Solo JEFE_TALLER y ADMIN
    */
-  const canEdit = hasRole(["ADMIN", "SUPERVISOR"]);
+  const canCreate = hasRole(["JEFE_TALLER", "ADMIN", "GUARDIA"]);
+  const canEdit = hasRole(["JEFE_TALLER", "ADMIN"]);
 
   /**
    * Obtener color CSS según el estado de la OT.
@@ -204,7 +205,7 @@ export default function WorkOrdersPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Órdenes de Trabajo</h1>
-        {canEdit && (
+        {canCreate && (
           <Link 
             href="/workorders/create" 
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium shadow-sm hover:shadow"

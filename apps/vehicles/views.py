@@ -26,12 +26,15 @@ Endpoints principales:
 from rest_framework import viewsets, filters, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.filters import OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db import transaction  # Para transacciones atómicas
 from django.utils import timezone  # Para timestamps
 from drf_spectacular.utils import extend_schema  # Para documentación OpenAPI
 
 from .models import Vehiculo, IngresoVehiculo, EvidenciaIngreso, HistorialVehiculo, BackupVehiculo
+from apps.workorders.models import BloqueoVehiculo
+from apps.workorders.serializers import BloqueoVehiculoSerializer
 from .serializers import (
     VehiculoSerializer, VehiculoListSerializer,
     IngresoVehiculoSerializer, EvidenciaIngresoSerializer,
@@ -39,6 +42,7 @@ from .serializers import (
 )
 from .permissions import VehiclePermission
 from apps.workorders.models import Auditoria
+from apps.core.serializers import EmptySerializer
 
 
 class VehiculoViewSet(viewsets.ModelViewSet):
@@ -225,6 +229,35 @@ class VehiculoViewSet(viewsets.ModelViewSet):
             # Si hay motivo → MANTENCION, si no → CORRECTIVO
             tipo_mantenimiento = "CORRECTIVO" if not motivo else "MANTENCION"
         
+        # Buscar o crear chofer si se proporciona información
+        chofer = None
+        chofer_rut = request.data.get("chofer_rut", "").strip()
+        chofer_nombre = request.data.get("chofer_nombre", "").strip()
+        
+        if chofer_rut or chofer_nombre:
+            from apps.drivers.models import Chofer
+            from apps.core.validators import validar_rut_chileno
+            
+            # Si se proporciona RUT, validarlo y buscar/crear chofer
+            if chofer_rut:
+                es_valido, rut_formateado = validar_rut_chileno(chofer_rut)
+                if es_valido:
+                    chofer, created = Chofer.objects.get_or_create(
+                        rut=rut_formateado.replace("-", "").replace(".", ""),
+                        defaults={
+                            "nombre_completo": chofer_nombre or "Chofer sin nombre",
+                            "activo": True,
+                        }
+                    )
+                    # Si el chofer ya existía, actualizar nombre si se proporcionó
+                    if not created and chofer_nombre:
+                        chofer.nombre_completo = chofer_nombre
+                        chofer.save(update_fields=["nombre_completo"])
+                elif chofer_nombre:
+                    # Si el RUT no es válido pero hay nombre, crear chofer sin RUT (no recomendado)
+                    # Por ahora, no crear chofer si el RUT no es válido
+                    pass
+        
         # Crear OT automáticamente
         ot = OrdenTrabajo.objects.create(
             vehiculo=vehiculo,
@@ -235,6 +268,7 @@ class VehiculoViewSet(viewsets.ModelViewSet):
             zona=request.data.get("zona", vehiculo.zona or ""),
             site=request.data.get("site", vehiculo.site or ""),
             causa_ingreso=request.data.get("observaciones", ""),
+            chofer=chofer,  # Asociar chofer si se proporcionó
         )
         
         # Registrar en historial y calcular SLA
@@ -280,6 +314,207 @@ class VehiculoViewSet(viewsets.ModelViewSet):
                 "motivo": ot.motivo
             }
         }, status=status.HTTP_201_CREATED)
+
+    @extend_schema(
+        responses={200: None},
+        description="Genera un PDF del ticket de ingreso de un vehículo"
+    )
+    @action(detail=False, methods=['get'], url_path='ingreso/(?P<ingreso_id>[^/.]+)/ticket', permission_classes=[permissions.IsAuthenticated])
+    def generar_ticket_ingreso(self, request, ingreso_id=None):
+        """
+        Genera un PDF del ticket de ingreso de un vehículo.
+        
+        Endpoint: GET /api/v1/vehicles/ingreso/{ingreso_id}/ticket/
+        
+        Permisos:
+        - Requiere autenticación
+        
+        Retorna:
+        - PDF del ticket de ingreso
+        """
+        from apps.reports.pdf_generator import generar_ticket_ingreso_pdf
+        from django.http import HttpResponse
+        
+        try:
+            pdf_buffer = generar_ticket_ingreso_pdf(ingreso_id)
+            
+            # Crear respuesta HTTP con el PDF
+            response = HttpResponse(
+                pdf_buffer.getvalue(),
+                content_type='application/pdf'
+            )
+            response['Content-Disposition'] = f'inline; filename="ticket_ingreso_{ingreso_id[:8]}.pdf"'
+            return response
+        except ValueError as e:
+            return Response(
+                {"detail": str(e)},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error al generar ticket de ingreso: {e}")
+            return Response(
+                {"detail": "Error al generar el ticket de ingreso"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @extend_schema(
+        request=EmptySerializer,
+        responses={200: None},
+        description="Registra la salida de un vehículo del taller"
+    )
+    @action(detail=False, methods=['post'], url_path='salida', permission_classes=[permissions.IsAuthenticated])
+    @transaction.atomic
+    def registrar_salida(self, request):
+        """
+        Registra la salida de un vehículo del taller.
+        
+        Endpoint: POST /api/v1/vehicles/salida/
+        
+        Permisos:
+        - Solo GUARDIA puede registrar salidas
+        
+        Body JSON:
+        {
+            "ingreso_id": "uuid-del-ingreso",
+            "observaciones_salida": "Observaciones opcionales",
+            "kilometraje_salida": 50000  // Opcional
+        }
+        """
+        # Verificar que el usuario sea GUARDIA
+        if request.user.rol != "GUARDIA":
+            return Response(
+                {"detail": "Solo el Guardia puede registrar salidas."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        ingreso_id = request.data.get("ingreso_id")
+        if not ingreso_id:
+            return Response(
+                {"detail": "El ID del ingreso es requerido."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            ingreso = IngresoVehiculo.objects.get(id=ingreso_id)
+        except IngresoVehiculo.DoesNotExist:
+            return Response(
+                {"detail": "Ingreso no encontrado."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Validar que el vehículo no haya salido ya
+        if ingreso.salio:
+            return Response(
+                {"detail": "Este vehículo ya salió del taller."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validar que todas las OTs estén cerradas
+        from apps.workorders.models import OrdenTrabajo
+        ots_activas = OrdenTrabajo.objects.filter(
+            vehiculo=ingreso.vehiculo,
+            estado__in=["ABIERTA", "EN_DIAGNOSTICO", "EN_EJECUCION", "EN_PAUSA", "EN_QA"]
+        ).exists()
+        
+        if ots_activas:
+            return Response(
+                {"detail": "El vehículo tiene OTs activas. Debe cerrarlas antes de registrar la salida."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Registrar salida
+        ingreso.fecha_salida = timezone.now()
+        ingreso.guardia_salida = request.user
+        ingreso.observaciones_salida = request.data.get("observaciones_salida", "")
+        ingreso.kilometraje_salida = request.data.get("kilometraje_salida")
+        ingreso.salio = True
+        ingreso.save()
+        
+        # Cambiar estado del vehículo
+        ingreso.vehiculo.estado = "ACTIVO"
+        ingreso.vehiculo.save(update_fields=["estado"])
+        
+        # Registrar auditoría
+        Auditoria.objects.create(
+            usuario=request.user,
+            accion="REGISTRAR_SALIDA_VEHICULO",
+            objeto_tipo="IngresoVehiculo",
+            objeto_id=str(ingreso.id),
+            payload={
+                "vehiculo_id": str(ingreso.vehiculo.id),
+                "patente": ingreso.vehiculo.patente,
+                "fecha_salida": ingreso.fecha_salida.isoformat()
+            }
+        )
+        
+        # Registrar en historial
+        try:
+            from apps.vehicles.utils import registrar_evento_historial
+            registrar_evento_historial(
+                vehiculo=ingreso.vehiculo,
+                tipo_evento="SALIDA_TALLER",
+                fecha_salida=ingreso.fecha_salida,
+                fecha_ingreso=ingreso.fecha_ingreso,
+                descripcion=f"Salida registrada por {request.user.get_full_name()}"
+            )
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error al registrar historial de salida {ingreso.id}: {e}")
+        
+        serializer = IngresoVehiculoSerializer(ingreso)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        description="Obtiene la lista de ingresos del día",
+        responses={200: None}
+    )
+    @action(detail=False, methods=['get'], url_path='ingresos-hoy', permission_classes=[permissions.IsAuthenticated])
+    def ingresos_hoy(self, request):
+        """
+        Obtiene la lista de ingresos del día actual.
+        
+        Endpoint: GET /api/v1/vehicles/ingresos-hoy/
+        
+        Permisos:
+        - GUARDIA, ADMIN, SUPERVISOR
+        
+        Query params:
+        - patente: Filtrar por patente (opcional)
+        
+        Retorna:
+        - 200: Lista de ingresos del día con información completa
+        """
+        # Verificar permisos
+        if request.user.rol not in ["GUARDIA", "ADMIN", "SUPERVISOR"]:
+            return Response(
+                {"detail": "No tiene permisos para ver ingresos."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Obtener fecha de hoy
+        hoy = timezone.now().date()
+        
+        # Filtrar ingresos del día
+        ingresos = IngresoVehiculo.objects.filter(
+            fecha_ingreso__date=hoy
+        ).select_related("vehiculo", "guardia", "guardia_salida").order_by("-fecha_ingreso")
+        
+        # Filtrar por patente si se proporciona
+        patente = request.query_params.get("patente", "").strip().upper()
+        if patente:
+            ingresos = ingresos.filter(vehiculo__patente__icontains=patente)
+        
+        # Serializar
+        serializer = IngresoVehiculoSerializer(ingresos, many=True)
+        
+        return Response({
+            "fecha": hoy.isoformat(),
+            "total": ingresos.count(),
+            "ingresos": serializer.data
+        })
 
     @extend_schema(
         request=EvidenciaIngresoSerializer,
@@ -610,3 +845,98 @@ class BackupVehiculoViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(backup)
         return Response(serializer.data)
+
+
+
+
+# ============== BLOQUEOS DE VEHÍCULOS =================
+class BloqueoVehiculoViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gestión de bloqueos de vehículos.
+    
+    Endpoints:
+    - GET /api/v1/vehicles/bloqueos/ → Listar bloqueos
+    - POST /api/v1/vehicles/bloqueos/ → Crear bloqueo
+    - GET /api/v1/vehicles/bloqueos/{id}/ → Ver bloqueo
+    - PUT/PATCH /api/v1/vehicles/bloqueos/{id}/ → Editar bloqueo
+    - DELETE /api/v1/vehicles/bloqueos/{id}/ → Eliminar bloqueo
+    - POST /api/v1/vehicles/bloqueos/{id}/resolver/ → Resolver bloqueo
+    """
+    queryset = BloqueoVehiculo.objects.select_related("vehiculo", "creado_por", "resuelto_por").all().order_by("-creado_en")
+    serializer_class = BloqueoVehiculoSerializer
+    permission_classes = [VehiclePermission]
+    
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_fields = ["vehiculo", "tipo", "estado"]
+    ordering_fields = ["creado_en"]
+    
+    def perform_create(self, serializer):
+        """Asignar usuario automáticamente al crear bloqueo."""
+        serializer.save(creado_por=self.request.user)
+        
+        # Registrar auditoría
+        bloqueo = serializer.instance
+        Auditoria.objects.create(
+            usuario=self.request.user,
+            accion="CREAR_BLOQUEO_VEHICULO",
+            objeto_tipo="BloqueoVehiculo",
+            objeto_id=str(bloqueo.id),
+            payload={
+                "vehiculo_id": str(bloqueo.vehiculo.id),
+                "patente": bloqueo.vehiculo.patente,
+                "tipo": bloqueo.tipo
+            }
+        )
+    
+    @extend_schema(
+        request=EmptySerializer,
+        responses={200: None},
+        description="Resuelve un bloqueo de vehículo"
+    )
+    @action(detail=True, methods=['post'], url_path='resolver')
+    @transaction.atomic
+    def resolver(self, request, pk=None):
+        """
+        Resuelve un bloqueo de vehículo.
+        
+        Endpoint: POST /api/v1/vehicles/bloqueos/{id}/resolver/
+        
+        Permisos:
+        - ADMIN, SUPERVISOR, JEFE_TALLER
+        
+        Body JSON:
+        {
+            "motivo_resolucion": "Motivo opcional"  // Opcional
+        }
+        """
+        bloqueo = self.get_object()
+        
+        if bloqueo.estado != "ACTIVO":
+            return Response(
+                {"detail": "El bloqueo ya está resuelto o cancelado."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        bloqueo.estado = "RESUELTO"
+        bloqueo.resuelto_por = request.user
+        bloqueo.resuelto_en = timezone.now()
+        bloqueo.save()
+        
+        # Registrar auditoría
+        Auditoria.objects.create(
+            usuario=request.user,
+            accion="RESOLVER_BLOQUEO_VEHICULO",
+            objeto_tipo="BloqueoVehiculo",
+            objeto_id=str(bloqueo.id),
+            payload={
+                "vehiculo_id": str(bloqueo.vehiculo.id),
+                "patente": bloqueo.vehiculo.patente
+            }
+        )
+        
+        return Response({
+            "detail": "Bloqueo resuelto correctamente.",
+            "bloqueo": BloqueoVehiculoSerializer(bloqueo).data
+        })
+
+

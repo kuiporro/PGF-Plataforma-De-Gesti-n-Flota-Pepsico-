@@ -19,23 +19,23 @@ from .models import OrdenTrabajo  # Modelo de Orden de Trabajo
 
 
 # ==================== DEFINICIÓN DE TRANSICIONES VÁLIDAS ====================
+"""
+Diccionario que define las transiciones válidas entre estados.
+
+Estructura: {estado_actual: {estados_destino_permitidos}}
+
+Reglas de negocio:
+- ABIERTA: puede ir a diagnóstico, ejecución directa, o anularse
+- EN_DIAGNOSTICO: puede volver a ABIERTA (si hay error) o ir a ejecución
+- EN_EJECUCION: puede pausarse, ir a QA, anularse, o marcarse como retrabajo
+- EN_PAUSA: solo puede volver a ejecución o anularse
+- EN_QA: puede cerrarse, volver a ejecución, o marcarse como retrabajo
+- RETRABAJO: puede volver a ejecución, ir a QA, o anularse
+- CERRADA: estado final, no puede cambiar
+- ANULADA: estado final, no puede cambiar
+"""
 
 VALID_TRANSITIONS = {
-    """
-    Diccionario que define las transiciones válidas entre estados.
-    
-    Estructura: {estado_actual: {estados_destino_permitidos}}
-    
-    Reglas de negocio:
-    - ABIERTA: puede ir a diagnóstico, ejecución directa, o anularse
-    - EN_DIAGNOSTICO: puede volver a ABIERTA (si hay error) o ir a ejecución
-    - EN_EJECUCION: puede pausarse, ir a QA, anularse, o marcarse como retrabajo
-    - EN_PAUSA: solo puede volver a ejecución o anularse
-    - EN_QA: puede cerrarse, volver a ejecución, o marcarse como retrabajo
-    - RETRABAJO: puede volver a ejecución, ir a QA, o anularse
-    - CERRADA: estado final, no puede cambiar
-    - ANULADA: estado final, no puede cambiar
-    """
     "ABIERTA": {"EN_DIAGNOSTICO", "EN_EJECUCION", "ANULADA"},
     # Permite diagnóstico previo o ejecución directa
     # También permite anular si es necesario

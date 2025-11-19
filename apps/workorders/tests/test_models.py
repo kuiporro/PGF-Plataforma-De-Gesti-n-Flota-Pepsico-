@@ -53,7 +53,7 @@ class TestPausaModel:
         )
         assert pausa.ot == orden_trabajo
         assert pausa.motivo == "Prueba de pausa"
-        assert pausa.fecha_pausa is not None
+        assert pausa.inicio is not None
     
     @pytest.mark.model
     def test_pausa_str_representation(self, db, orden_trabajo, supervisor_user):

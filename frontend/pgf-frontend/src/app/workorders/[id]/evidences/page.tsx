@@ -5,6 +5,7 @@ import { ENDPOINTS } from "@/lib/constants";
 import { withSession } from "@/lib/api.client";
 import Link from "next/link";
 import { useToast } from "@/components/ToastContainer";
+import { useAuth } from "@/store/auth";
 
 /**
  * Página de evidencias de una Orden de Trabajo.
@@ -21,6 +22,10 @@ import { useToast } from "@/components/ToastContainer";
 export default function EvidencesPage({ params }: any) {
   const otId = params.id;
   const toast = useToast();
+  const { hasRole } = useAuth();
+
+  // Solo MECANICO y JEFE_TALLER pueden subir evidencias
+  const canUpload = hasRole(["MECANICO", "JEFE_TALLER", "ADMIN"]);
 
   const [rows, setRows] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
@@ -122,13 +127,15 @@ export default function EvidencesPage({ params }: any) {
       {/* HEADER */}
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Evidencias</h1>
-        <Link
-          href={`/workorders/${otId}/evidences/upload`}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
-          style={{ backgroundColor: '#003DA5' }}
-        >
-          + Subir Evidencia
-        </Link>
+        {canUpload && (
+          <Link
+            href={`/workorders/${otId}/evidences/upload`}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
+            style={{ backgroundColor: '#003DA5' }}
+          >
+            + Subir Evidencia
+          </Link>
+        )}
       </div>
 
       {/* FILTROS Y BÚSQUEDA */}

@@ -58,13 +58,15 @@ from .serializers import OrdenTrabajoListSerializer
 
 from .models import (
     OrdenTrabajo, ItemOT, Presupuesto, DetallePresup,
-    Aprobacion, Pausa, Checklist, Evidencia, Auditoria
+    Aprobacion, Pausa, Checklist, Evidencia, Auditoria,
+    ComentarioOT, BloqueoVehiculo, VersionEvidencia
 )
 from .serializers import (
     OrdenTrabajoSerializer, ItemOTSerializer,
     PresupuestoSerializer, DetallePresupSerializer,
     AprobacionSerializer, PausaSerializer,
-    ChecklistSerializer, EvidenciaSerializer
+    ChecklistSerializer, EvidenciaSerializer,
+    ComentarioOTSerializer, BloqueoVehiculoSerializer, VersionEvidenciaSerializer
 )
 
 
@@ -144,6 +146,7 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
 
     # Configuración de filtros
     filter_backends = [DjangoFilterBackend, OrderingFilter, SearchFilter]
+    filterset_class = OrdenTrabajoFilter  # Usar el filtro personalizado
     ordering_fields = ["id", "apertura", "cierre", "estado"]  # Campos ordenables
     search_fields = ["vehiculo__patente"]  # Búsqueda por patente
 
@@ -153,13 +156,31 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
         
         Sobrescribe el método create del ModelViewSet para agregar
         lógica de notificaciones y registro de historial cuando se crea una nueva OT.
+        
+        Flujo según rol:
+        - GUARDIA: Crea OT cuando el vehículo llega al taller, estado ABIERTA
+        - SUPERVISOR/ADMIN: Pueden crear OT con supervisor asignado
         """
+        # Validar que solo JEFE_TALLER, ADMIN o GUARDIA pueden crear OT
+        # GUARDIA solo puede crear OT a través del flujo de ingreso de vehículos
+        # (que se maneja en apps/vehicles/views.py), pero permitimos aquí para consistencia
+        if request.user.rol not in ("JEFE_TALLER", "ADMIN", "GUARDIA"):
+            return Response(
+                {"detail": "Solo JEFE_TALLER, ADMIN o GUARDIA pueden crear OT."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
         # Crear la OT usando el método del padre
         response = super().create(request, *args, **kwargs)
         
         # Si la creación fue exitosa, crear notificaciones y registrar historial
         if response.status_code == status.HTTP_201_CREATED:
             ot = OrdenTrabajo.objects.get(id=response.data['id'])
+            
+            # Asegurar que el estado sea ABIERTA por defecto
+            if ot.estado != "ABIERTA":
+                ot.estado = "ABIERTA"
+                ot.save(update_fields=["estado"])
             
             # Registrar en historial del vehículo
             try:
@@ -248,9 +269,10 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
         - 403: Si no tiene permisos
         - 400: Si la transición no es válida
         """
-        if request.user.rol not in ("SUPERVISOR", "ADMIN", "MECANICO"):
+        # Solo MECANICO y JEFE_TALLER pueden cambiar a EN_EJECUCION
+        if request.user.rol not in ("MECANICO", "JEFE_TALLER"):
             return Response(
-                {"detail": "Solo SUPERVISOR/ADMIN/MECANICO pueden iniciar la ejecución."},
+                {"detail": "Solo MECANICO o JEFE_TALLER pueden iniciar la ejecución."},
                 status=status.HTTP_403_FORBIDDEN
             )
         ot = self.get_object()
@@ -275,9 +297,10 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
         - 200: {"estado": "EN_QA"}
         - 403: Si no tiene permisos
         """
-        if request.user.rol not in ("SUPERVISOR", "ADMIN"):
+        # Solo MECANICO y JEFE_TALLER pueden mover a QA
+        if request.user.rol not in ("MECANICO", "JEFE_TALLER"):
             return Response(
-                {"detail": "Solo SUPERVISOR/ADMIN pueden mover a QA."},
+                {"detail": "Solo MECANICO o JEFE_TALLER pueden mover a QA."},
                 status=status.HTTP_403_FORBIDDEN
             )
         ot = self.get_object()
@@ -304,9 +327,10 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
         - 200: {"estado": "EN_PAUSA"}
         - 403: Si no tiene permisos
         """
-        if request.user.rol not in ("MECANICO", "SUPERVISOR", "ADMIN", "JEFE_TALLER"):
+        # Solo MECANICO y JEFE_TALLER pueden pausar
+        if request.user.rol not in ("MECANICO", "JEFE_TALLER"):
             return Response(
-                {"detail": "No autorizado para pausar OT."},
+                {"detail": "Solo MECANICO o JEFE_TALLER pueden pausar OT."},
                 status=status.HTTP_403_FORBIDDEN
             )
         ot = self.get_object()
@@ -341,9 +365,10 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
         - 403: Si no tiene permisos
         - 400: Si el estado no permite cerrar o faltan campos obligatorios
         """
-        if request.user.rol not in ("SUPERVISOR", "ADMIN", "JEFE_TALLER"):
+        # Solo JEFE_TALLER puede cerrar OT
+        if request.user.rol != "JEFE_TALLER":
             return Response(
-                {"detail": "Solo SUPERVISOR/ADMIN/JEFE_TALLER pueden cerrar la OT."},
+                {"detail": "Solo JEFE_TALLER puede cerrar la OT."},
                 status=status.HTTP_403_FORBIDDEN
             )
         ot = self.get_object()
@@ -443,9 +468,10 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
         - 200: {"estado": "ANULADA"}
         - 403: Si no tiene permisos
         """
-        if request.user.rol not in ("SUPERVISOR", "ADMIN"):
+        # Solo JEFE_TALLER puede anular OT
+        if request.user.rol != "JEFE_TALLER":
             return Response(
-                {"detail": "Solo SUPERVISOR/ADMIN pueden anular la OT."},
+                {"detail": "Solo JEFE_TALLER puede anular la OT."},
                 status=status.HTTP_403_FORBIDDEN
             )
         ot = self.get_object()
@@ -572,9 +598,10 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
         - 400: Si falta mecanico_id o estado inválido
         - 404: Si el mecánico no existe
         """
-        if request.user.rol not in ("SUPERVISOR", "ADMIN", "COORDINADOR_ZONA"):
+        # Solo JEFE_TALLER puede asignar mecánicos
+        if request.user.rol != "JEFE_TALLER":
             return Response(
-                {"detail": "Solo SUPERVISOR/COORDINADOR puede aprobar asignación."},
+                {"detail": "Solo JEFE_TALLER puede asignar mecánicos."},
                 status=status.HTTP_403_FORBIDDEN
             )
         ot = self.get_object()
@@ -671,9 +698,10 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
         - 403: Si no tiene permisos
         - 400: Si el estado no permite retrabajo
         """
-        if request.user.rol not in ("SUPERVISOR", "ADMIN", "JEFE_TALLER"):
+        # Solo JEFE_TALLER puede aprobar QA y marcar retrabajo
+        if request.user.rol != "JEFE_TALLER":
             return Response(
-                {"detail": "Solo SUPERVISOR/JEFE_TALLER puede marcar como retrabajo."},
+                {"detail": "Solo JEFE_TALLER puede marcar como retrabajo."},
                 status=status.HTTP_403_FORBIDDEN
             )
         ot = self.get_object()
@@ -1552,3 +1580,297 @@ class EvidenciaViewSet(viewsets.ModelViewSet):
             file_url = f"https://{bucket}.s3.{region}.amazonaws.com/{key}"
 
         return Response({"upload": presigned, "file_url": file_url})
+
+
+# ============== COMENTARIOS EN OT =================
+class ComentarioOTViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gestión de comentarios en OT.
+    
+    Endpoints:
+    - GET /api/v1/work/comentarios/ → Listar comentarios
+    - POST /api/v1/work/comentarios/ → Crear comentario
+    - GET /api/v1/work/comentarios/{id}/ → Ver comentario
+    - PUT/PATCH /api/v1/work/comentarios/{id}/ → Editar comentario
+    - DELETE /api/v1/work/comentarios/{id}/ → Eliminar comentario
+    """
+    queryset = ComentarioOT.objects.select_related("usuario", "ot").all().order_by("creado_en")
+    serializer_class = ComentarioOTSerializer
+    permission_classes = [WorkOrderPermission]
+    
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_fields = ["ot", "usuario"]
+    ordering_fields = ["creado_en"]
+    
+    def perform_create(self, serializer):
+        """Asignar usuario automáticamente al crear comentario."""
+        serializer.save(usuario=self.request.user)
+        
+        # Notificar a usuarios mencionados
+        comentario = serializer.instance
+        menciones = comentario.menciones or []
+        
+        if menciones:
+            try:
+                from apps.notifications.utils import crear_notificacion_ot_comentario
+                crear_notificacion_ot_comentario(comentario, menciones)
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error al crear notificaciones de comentario {comentario.id}: {e}")
+    
+    def perform_update(self, serializer):
+        """Marcar comentario como editado."""
+        serializer.save(editado=True, editado_en=timezone.now())
+
+
+# ============== TIMELINE DE OT =================
+@extend_schema(
+    description="Obtiene el timeline consolidado de una OT",
+    responses={200: None}
+)
+@api_view(['GET'])
+@permission_classes([WorkOrderPermission])
+def timeline_ot(request, ot_id):
+    """
+    Endpoint para obtener el timeline consolidado de una OT.
+    
+    Retorna:
+    - Cambios de estado (de Auditoria)
+    - Comentarios
+    - Evidencias
+    - Pausas
+    - Checklists
+    - Actores (usuarios involucrados)
+    
+    Endpoint: GET /api/v1/work/ordenes/{ot_id}/timeline/
+    """
+    try:
+        ot = OrdenTrabajo.objects.get(id=ot_id)
+    except OrdenTrabajo.DoesNotExist:
+        return Response(
+            {"detail": "OT no encontrada."},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    # Obtener cambios de estado desde Auditoria
+    cambios_estado = Auditoria.objects.filter(
+        objeto_tipo="OrdenTrabajo",
+        objeto_id=str(ot_id),
+        accion__in=["CAMBIO_ESTADO", "TRANSICION_ESTADO"]
+    ).order_by("ts")
+    
+    # Obtener comentarios
+    comentarios = ComentarioOT.objects.filter(ot=ot).order_by("creado_en")
+    
+    # Obtener evidencias
+    evidencias = Evidencia.objects.filter(ot=ot).order_by("subido_en")
+    
+    # Obtener pausas
+    pausas = Pausa.objects.filter(ot=ot).order_by("inicio")
+    
+    # Obtener checklists
+    checklists = Checklist.objects.filter(ot=ot).order_by("fecha")
+    
+    # Construir timeline
+    timeline = []
+    
+    # Agregar creación de OT
+    timeline.append({
+        "tipo": "creacion",
+        "fecha": ot.apertura,
+        "usuario": None,
+        "accion": "OT creada",
+        "detalle": {
+            "estado": ot.estado,
+            "motivo": ot.motivo
+        }
+    })
+    
+    # Agregar cambios de estado
+    for cambio in cambios_estado:
+        timeline.append({
+            "tipo": "cambio_estado",
+            "fecha": cambio.ts,
+            "usuario": {
+                "id": str(cambio.usuario.id) if cambio.usuario else None,
+                "nombre": cambio.usuario.get_full_name() if cambio.usuario else "Sistema",
+                "rol": cambio.usuario.rol if cambio.usuario else None
+            },
+            "accion": cambio.accion,
+            "detalle": cambio.payload
+        })
+    
+    # Agregar comentarios
+    for comentario in comentarios:
+        timeline.append({
+            "tipo": "comentario",
+            "fecha": comentario.creado_en,
+            "usuario": {
+                "id": str(comentario.usuario.id) if comentario.usuario else None,
+                "nombre": comentario.usuario.get_full_name() if comentario.usuario else "Sistema",
+                "rol": comentario.usuario.rol if comentario.usuario else None
+            },
+            "accion": "Comentario agregado",
+            "detalle": {
+                "contenido": comentario.contenido,
+                "menciones": comentario.menciones,
+                "editado": comentario.editado
+            }
+        })
+    
+    # Agregar evidencias
+    for evidencia in evidencias:
+        timeline.append({
+            "tipo": "evidencia",
+            "fecha": evidencia.subido_en,
+            "usuario": None,  # Evidencia no tiene usuario directo
+            "accion": "Evidencia subida",
+            "detalle": {
+                "tipo": evidencia.tipo,
+                "descripcion": evidencia.descripcion,
+                "url": evidencia.url,
+                "invalidado": evidencia.invalidado
+            }
+        })
+    
+    # Agregar pausas
+    for pausa in pausas:
+        timeline.append({
+            "tipo": "pausa",
+            "fecha": pausa.inicio,
+            "usuario": {
+                "id": str(pausa.usuario.id) if pausa.usuario else None,
+                "nombre": pausa.usuario.get_full_name() if pausa.usuario else "Sistema",
+                "rol": pausa.usuario.rol if pausa.usuario else None
+            },
+            "accion": f"Pausa: {pausa.tipo}",
+            "detalle": {
+                "motivo": pausa.motivo,
+                "duracion_minutos": pausa.duracion_minutos,
+                "es_automatica": pausa.es_automatica
+            }
+        })
+    
+    # Agregar checklists
+    for checklist in checklists:
+        timeline.append({
+            "tipo": "checklist",
+            "fecha": checklist.fecha,
+            "usuario": {
+                "id": str(checklist.verificador.id) if checklist.verificador else None,
+                "nombre": checklist.verificador.get_full_name() if checklist.verificador else "Sistema",
+                "rol": checklist.verificador.rol if checklist.verificador else None
+            },
+            "accion": f"Checklist: {checklist.resultado}",
+            "detalle": {
+                "resultado": checklist.resultado,
+                "observaciones": checklist.observaciones
+            }
+        })
+    
+    # Ordenar por fecha
+    timeline.sort(key=lambda x: x["fecha"])
+    
+    # Obtener actores (usuarios involucrados)
+    actores = set()
+    if ot.supervisor:
+        actores.add((str(ot.supervisor.id), ot.supervisor.get_full_name(), ot.supervisor.rol))
+    if ot.jefe_taller:
+        actores.add((str(ot.jefe_taller.id), ot.jefe_taller.get_full_name(), ot.jefe_taller.rol))
+    if ot.mecanico:
+        actores.add((str(ot.mecanico.id), ot.mecanico.get_full_name(), ot.mecanico.rol))
+    
+    return Response({
+        "ot_id": str(ot.id),
+        "timeline": timeline,
+        "actores": [
+            {"id": a[0], "nombre": a[1], "rol": a[2]} for a in actores
+        ]
+    })
+
+
+# ============== INVALIDAR EVIDENCIA =================
+@extend_schema(
+    description="Invalida una evidencia y crea una versión en el historial",
+    request=EmptySerializer,
+    responses={200: None}
+)
+@api_view(['POST'])
+@permission_classes([WorkOrderPermission])
+@transaction.atomic
+def invalidar_evidencia(request, evidencia_id):
+    """
+    Invalida una evidencia y crea un registro en el historial de versiones.
+    
+    Solo roles permitidos pueden invalidar evidencias:
+    - JEFE_TALLER
+    - ADMIN
+    - SUPERVISOR
+    
+    Endpoint: POST /api/v1/work/evidencias/{evidencia_id}/invalidar/
+    """
+    # Verificar permisos
+    if request.user.rol not in ["JEFE_TALLER", "ADMIN", "SUPERVISOR"]:
+        return Response(
+            {"detail": "No tiene permisos para invalidar evidencias."},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    try:
+        evidencia = Evidencia.objects.get(id=evidencia_id)
+    except Evidencia.DoesNotExist:
+        return Response(
+            {"detail": "Evidencia no encontrada."},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    # Validar que no esté ya invalidada
+    if evidencia.invalidado:
+        return Response(
+            {"detail": "La evidencia ya está invalidada."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Obtener motivo de invalidación
+    motivo = request.data.get("motivo", "")
+    if not motivo:
+        return Response(
+            {"detail": "El motivo de invalidación es obligatorio."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Guardar URL anterior antes de invalidar
+    url_anterior = evidencia.url
+    
+    # Invalidar evidencia
+    evidencia.invalidado = True
+    evidencia.invalidado_por = request.user
+    evidencia.invalidado_en = timezone.now()
+    evidencia.motivo_invalidacion = motivo
+    evidencia.save()
+    
+    # Crear versión en el historial
+    VersionEvidencia.objects.create(
+        evidencia_original=evidencia,
+        url_anterior=url_anterior,
+        invalidado_por=request.user,
+        motivo=motivo
+    )
+    
+    # Registrar auditoría
+    Auditoria.objects.create(
+        usuario=request.user,
+        accion="INVALIDAR_EVIDENCIA",
+        objeto_tipo="Evidencia",
+        objeto_id=str(evidencia.id),
+        payload={
+            "ot_id": str(evidencia.ot.id) if evidencia.ot else None,
+            "motivo": motivo
+        }
+    )
+    
+    return Response({
+        "detail": "Evidencia invalidada correctamente.",
+        "evidencia": EvidenciaSerializer(evidencia).data
+    })
