@@ -27,5 +27,11 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  css: {
+    postcss: {
+      // Deshabilitar PostCSS en tests para evitar conflictos con Tailwind
+      plugins: [],
+    },
+  },
 })
 

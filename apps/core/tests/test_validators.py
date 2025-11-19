@@ -21,30 +21,34 @@ class TestValidarRutChileno:
     @pytest.mark.validator
     def test_rut_valido_con_guion(self):
         """Test RUT válido con guión"""
-        es_valido, resultado = validar_rut_chileno("12345678-9")
+        # RUT válido: 12345678-5 (DV calculado correctamente)
+        es_valido, resultado = validar_rut_chileno("12345678-5")
         assert es_valido is True
-        assert resultado == "12345678-9"
+        assert resultado == "12345678-5"
     
     @pytest.mark.validator
     def test_rut_valido_sin_guion(self):
         """Test RUT válido sin guión (se agrega automáticamente)"""
-        es_valido, resultado = validar_rut_chileno("123456789")
+        # RUT válido: 12345678-5
+        es_valido, resultado = validar_rut_chileno("123456785")
         assert es_valido is True
-        assert resultado == "12345678-9"
+        assert resultado == "12345678-5"
     
     @pytest.mark.validator
     def test_rut_valido_con_puntos(self):
         """Test RUT válido con puntos (se limpian)"""
-        es_valido, resultado = validar_rut_chileno("12.345.678-9")
+        # RUT válido: 12345678-5
+        es_valido, resultado = validar_rut_chileno("12.345.678-5")
         assert es_valido is True
-        assert resultado == "12345678-9"
+        assert resultado == "12345678-5"
     
     @pytest.mark.validator
     def test_rut_valido_con_k(self):
         """Test RUT válido con K como dígito verificador"""
-        es_valido, resultado = validar_rut_chileno("11111111-K")
+        # RUT válido con K: 10000013-K (DV calculado correctamente)
+        es_valido, resultado = validar_rut_chileno("10000013-K")
         assert es_valido is True
-        assert resultado == "11111111-K"
+        assert resultado == "10000013-K"
     
     @pytest.mark.validator
     def test_rut_invalido_digito_verificador(self):

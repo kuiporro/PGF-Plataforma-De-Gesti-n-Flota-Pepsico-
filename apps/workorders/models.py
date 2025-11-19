@@ -685,11 +685,14 @@ class Evidencia(models.Model):
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     
-    # OT a la que pertenece la evidencia
+    # OT a la que pertenece la evidencia (opcional)
+    # Si es None, la evidencia es general y no está asociada a una OT específica
     ot = models.ForeignKey(
         OrdenTrabajo, 
         on_delete=models.CASCADE, 
-        related_name="evidencias"
+        related_name="evidencias",
+        null=True,
+        blank=True
     )
     
     # URL de la evidencia en S3

@@ -1503,7 +1503,11 @@ class EvidenciaViewSet(viewsets.ModelViewSet):
             )
 
         # Generar key único para el archivo
-        key = f"evidencias/{ot_id}/{uuid.uuid4()}-{filename}"
+        # Si no hay OT, usar carpeta "generales"
+        if ot_id:
+            key = f"evidencias/{ot_id}/{uuid.uuid4()}-{filename}"
+        else:
+            key = f"evidencias/generales/{uuid.uuid4()}-{filename}"
 
         # Determinar si usar LocalStack (desarrollo) o AWS real (producción)
         use_local = os.getenv("USE_LOCALSTACK_S3", "0") == "1"
