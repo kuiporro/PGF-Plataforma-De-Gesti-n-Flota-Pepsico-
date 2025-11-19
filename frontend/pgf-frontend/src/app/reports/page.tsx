@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/components/ToastContainer";
 import { useAuth } from "@/store/auth";
 import RoleGuard from "@/components/RoleGuard";
@@ -11,25 +11,89 @@ export default function ReportsPage() {
   const [fechaInicio, setFechaInicio] = useState("");
   const [fechaFin, setFechaFin] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingData, setLoadingData] = useState(false);
+  const [reportData, setReportData] = useState<any>(null);
+  const [tipoReporte, setTipoReporte] = useState<"diario" | "semanal" | "mensual" | null>(null);
 
   const canAccess = hasRole(["EJECUTIVO", "ADMIN", "JEFE_TALLER", "SUPERVISOR", "COORDINADOR_ZONA"]);
 
-  const downloadPDF = async (tipo: "diario" | "semanal" | "mensual") => {
+  // Cargar datos del reporte
+  const cargarDatosReporte = async (tipo: "diario" | "semanal" | "mensual") => {
     if (!canAccess) {
       toast.error("No tienes permisos para acceder a reportes");
+      return;
+    }
+
+    // Validar fechas según el tipo
+    if (tipo === "diario" && !fechaInicio) {
+      toast.error("Por favor selecciona una fecha para el reporte diario");
+      return;
+    }
+
+    if ((tipo === "semanal" || tipo === "mensual") && (!fechaInicio || !fechaFin)) {
+      // Establecer fechas por defecto si no están configuradas
+      setDefaultDates(tipo);
+      // Esperar un momento para que se actualicen las fechas
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    setLoadingData(true);
+    setTipoReporte(tipo);
+
+    try {
+      // Usar el endpoint de dashboard ejecutivo para mostrar los datos
+      const r = await fetch("/api/proxy/reports/dashboard-ejecutivo/", {
+        credentials: "include",
+      });
+
+      if (!r.ok) {
+        const error = await r.json().catch(() => ({ detail: "Error al cargar datos del reporte" }));
+        toast.error(error.detail || "Error al cargar datos del reporte");
+        return;
+      }
+
+      const text = await r.text();
+      if (!text || text.trim() === "") {
+        toast.error("No se recibieron datos del reporte");
+        return;
+      }
+
+      const data = JSON.parse(text);
+      setReportData(data);
+      toast.success("Reporte cargado correctamente");
+    } catch (error) {
+      console.error("Error:", error);
+      toast.error("Error al cargar datos del reporte");
+    } finally {
+      setLoadingData(false);
+    }
+  };
+
+  // Exportar a PDF
+  const exportarPDF = async () => {
+    if (!tipoReporte) {
+      toast.error("Primero debes cargar un reporte");
       return;
     }
 
     setLoading(true);
 
     try {
-      let url = `/api/proxy/reports/pdf/?tipo=${tipo}`;
+      let url = `/api/proxy/reports/pdf/?tipo=${tipoReporte}`;
       
-      if (fechaInicio) {
+      // Para reporte diario, usar fechaInicio
+      if (tipoReporte === "diario" && fechaInicio) {
         url += `&fecha_inicio=${fechaInicio}`;
       }
-      if (fechaFin) {
-        url += `&fecha_fin=${fechaFin}`;
+      
+      // Para reportes semanal y mensual, usar ambas fechas
+      if ((tipoReporte === "semanal" || tipoReporte === "mensual")) {
+        if (fechaInicio) {
+          url += `&fecha_inicio=${fechaInicio}`;
+        }
+        if (fechaFin) {
+          url += `&fecha_fin=${fechaFin}`;
+        }
       }
 
       const r = await fetch(url, {
@@ -37,26 +101,48 @@ export default function ReportsPage() {
       });
 
       if (!r.ok) {
-        const error = await r.json().catch(() => ({ detail: "Error al generar reporte" }));
-        toast.error(error.detail || "Error al generar reporte");
+        const errorText = await r.text();
+        let errorMessage = "Error al generar PDF";
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.detail || errorMessage;
+        } catch {
+          errorMessage = errorText || errorMessage;
+        }
+        toast.error(errorMessage);
+        return;
+      }
+
+      // Verificar que la respuesta sea un PDF
+      const contentType = r.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/pdf")) {
+        toast.error("La respuesta no es un PDF válido");
         return;
       }
 
       // Descargar PDF
       const blob = await r.blob();
+      
+      // Verificar que el blob no esté vacío
+      if (blob.size === 0) {
+        toast.error("El PDF generado está vacío");
+        return;
+      }
+      
       const urlBlob = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = urlBlob;
-      a.download = `reporte_${tipo}_${fechaInicio || new Date().toISOString().split('T')[0]}.pdf`;
+      const fechaStr = fechaInicio || new Date().toISOString().split('T')[0];
+      a.download = `reporte_${tipoReporte}_${fechaStr}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(urlBlob);
 
-      toast.success("Reporte descargado correctamente");
+      toast.success("PDF descargado correctamente");
     } catch (error) {
-      console.error("Error:", error);
-      toast.error("Error al descargar reporte");
+      console.error("Error al exportar PDF:", error);
+      toast.error("Error al descargar PDF: " + (error instanceof Error ? error.message : "Error desconocido"));
     } finally {
       setLoading(false);
     }
@@ -85,27 +171,21 @@ export default function ReportsPage() {
       <div className="p-6">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Reportes</h1>
-          {/* Botón rápido de reporte diario */}
-          <button
-            onClick={() => {
-              const hoy = new Date().toISOString().split('T')[0];
-              setFechaInicio(hoy);
-              downloadPDF("diario");
-            }}
-            disabled={loading}
-            className="px-6 py-3 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
-            style={{ backgroundColor: '#003DA5' }}
-          >
-            {loading ? "Generando..." : "📊 Reporte de Hoy"}
-          </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {/* Reporte Diario */}
-          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
-            <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Reporte Diario</h2>
+          <div className={`bg-white dark:bg-gray-800 shadow rounded-lg p-6 border-2 ${
+            tipoReporte === "diario" ? "border-blue-500" : "border-transparent"
+          }`}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Reporte Diario</h2>
+              {tipoReporte === "diario" && (
+                <span className="px-2 py-1 bg-blue-500 text-white text-xs rounded">Seleccionado</span>
+              )}
+            </div>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              Genera un reporte con la operación del día seleccionado.
+              Visualiza y exporta el reporte del día seleccionado.
             </p>
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -118,21 +198,38 @@ export default function ReportsPage() {
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
               />
             </div>
-            <button
-              onClick={() => downloadPDF("diario")}
-              disabled={loading || !fechaInicio}
-              className="w-full px-4 py-2 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ backgroundColor: '#003DA5' }}
-            >
-              {loading ? "Generando..." : "Descargar PDF"}
-            </button>
+            <div className="space-y-2">
+              <button
+                onClick={() => {
+                  const hoy = new Date().toISOString().split('T')[0];
+                  setFechaInicio(hoy);
+                }}
+                className="w-full px-3 py-1 text-sm bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors"
+              >
+                Usar Hoy
+              </button>
+              <button
+                onClick={() => cargarDatosReporte("diario")}
+                disabled={loadingData || !fechaInicio}
+                className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loadingData && tipoReporte === "diario" ? "Cargando..." : "Ver Reporte"}
+              </button>
+            </div>
           </div>
 
           {/* Reporte Semanal */}
-          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
-            <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Reporte Semanal</h2>
+          <div className={`bg-white dark:bg-gray-800 shadow rounded-lg p-6 border-2 ${
+            tipoReporte === "semanal" ? "border-blue-500" : "border-transparent"
+          }`}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Reporte Semanal</h2>
+              {tipoReporte === "semanal" && (
+                <span className="px-2 py-1 bg-blue-500 text-white text-xs rounded">Seleccionado</span>
+              )}
+            </div>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              Genera un reporte con la productividad de la última semana.
+              Visualiza y exporta el reporte de la última semana.
             </p>
             <div className="mb-4 space-y-2">
               <div>
@@ -159,26 +256,32 @@ export default function ReportsPage() {
               </div>
               <button
                 onClick={() => setDefaultDates("semanal")}
-                className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                className="w-full px-3 py-1 text-sm bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors"
               >
                 Últimos 7 días
               </button>
             </div>
             <button
-              onClick={() => downloadPDF("semanal")}
-              disabled={loading}
-              className="w-full px-4 py-2 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ backgroundColor: '#003DA5' }}
+              onClick={() => cargarDatosReporte("semanal")}
+              disabled={loadingData}
+              className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? "Generando..." : "Descargar PDF"}
+              {loadingData && tipoReporte === "semanal" ? "Cargando..." : "Ver Reporte"}
             </button>
           </div>
 
           {/* Reporte Mensual */}
-          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
-            <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Reporte Mensual</h2>
+          <div className={`bg-white dark:bg-gray-800 shadow rounded-lg p-6 border-2 ${
+            tipoReporte === "mensual" ? "border-blue-500" : "border-transparent"
+          }`}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Reporte Mensual</h2>
+              {tipoReporte === "mensual" && (
+                <span className="px-2 py-1 bg-blue-500 text-white text-xs rounded">Seleccionado</span>
+              )}
+            </div>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              Genera un reporte con la productividad del último mes.
+              Visualiza y exporta el reporte del último mes.
             </p>
             <div className="mb-4 space-y-2">
               <div>
@@ -205,23 +308,114 @@ export default function ReportsPage() {
               </div>
               <button
                 onClick={() => setDefaultDates("mensual")}
-                className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                className="w-full px-3 py-1 text-sm bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors"
               >
                 Últimos 30 días
               </button>
             </div>
             <button
-              onClick={() => downloadPDF("mensual")}
-              disabled={loading}
-              className="w-full px-4 py-2 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ backgroundColor: '#003DA5' }}
+              onClick={() => cargarDatosReporte("mensual")}
+              disabled={loadingData}
+              className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? "Generando..." : "Descargar PDF"}
+              {loadingData && tipoReporte === "mensual" ? "Cargando..." : "Ver Reporte"}
             </button>
           </div>
         </div>
+
+        {/* Mostrar datos del reporte */}
+        {reportData && (
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 mt-8">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                Reporte {tipoReporte === "diario" ? "Diario" : tipoReporte === "semanal" ? "Semanal" : "Mensual"}
+              </h2>
+              <button
+                onClick={exportarPDF}
+                disabled={loading}
+                className="px-6 py-3 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+                style={{ backgroundColor: '#003DA5' }}
+              >
+                {loading ? "Generando PDF..." : "📄 Exportar a PDF"}
+              </button>
+            </div>
+
+            {loadingData ? (
+              <div className="text-center py-8">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
+                <p className="mt-4 text-gray-600 dark:text-gray-400">Cargando datos...</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* KPIs */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <KpiCard title="OT Abiertas" value={reportData.kpis?.ot_abiertas || 0} color="bg-blue-500" />
+                  <KpiCard title="OT en Ejecución" value={reportData.kpis?.ot_en_ejecucion || 0} color="bg-yellow-500" />
+                  <KpiCard title="OT en Pausa" value={reportData.kpis?.ot_en_pausa || 0} color="bg-orange-500" />
+                  <KpiCard title="OT en QA" value={reportData.kpis?.ot_en_qa || 0} color="bg-purple-500" />
+                  <KpiCard title="OT Cerradas Hoy" value={reportData.kpis?.ot_cerradas_hoy || 0} color="bg-green-600" />
+                  <KpiCard title="Vehículos en Taller" value={reportData.kpis?.vehiculos_en_taller || 0} color="bg-indigo-500" />
+                  <KpiCard title="Productividad (7 días)" value={reportData.kpis?.productividad_7_dias || 0} color="bg-teal-500" />
+                </div>
+
+                {/* Últimas 5 OT */}
+                {reportData.ultimas_5_ot && reportData.ultimas_5_ot.length > 0 && (
+                  <section>
+                    <h3 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Últimas 5 Órdenes de Trabajo</h3>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full">
+                        <thead>
+                          <tr className="bg-gray-100 dark:bg-gray-700">
+                            <th className="p-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">ID</th>
+                            <th className="p-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">Patente</th>
+                            <th className="p-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">Estado</th>
+                            <th className="p-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">Responsable</th>
+                            <th className="p-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">Apertura</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {reportData.ultimas_5_ot.map((ot: any) => (
+                            <tr key={ot.id} className="border-t border-gray-200 dark:border-gray-700">
+                              <td className="p-3 text-gray-900 dark:text-white">#{ot.id.substring(0, 8)}</td>
+                              <td className="p-3 text-gray-700 dark:text-gray-300">{ot.patente}</td>
+                              <td className="p-3">
+                                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                  ot.estado === "ABIERTA" ? "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400" :
+                                  ot.estado === "EN_EJECUCION" ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400" :
+                                  ot.estado === "EN_PAUSA" ? "bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-400" :
+                                  ot.estado === "EN_QA" ? "bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-400" :
+                                  "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400"
+                                }`}>
+                                  {ot.estado}
+                                </span>
+                              </td>
+                              <td className="p-3 text-gray-700 dark:text-gray-300">{ot.responsable || "Sin responsable"}</td>
+                              <td className="p-3 text-gray-700 dark:text-gray-300">
+                                {new Date(ot.apertura).toLocaleDateString()}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </RoleGuard>
   );
 }
 
+function KpiCard({ title, value, color }: any) {
+  return (
+    <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg flex flex-col">
+      <span className="text-gray-600 dark:text-gray-400 text-sm mb-2">{title}</span>
+      <span className={`text-3xl font-bold ${color} text-white px-3 py-2 rounded`}>
+        {value}
+      </span>
+    </div>
+  );
+}

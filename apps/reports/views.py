@@ -419,11 +419,6 @@ class ReportePDFView(views.APIView):
         from .pdf_generator_completo import (
             generar_reporte_estado_flota,
             generar_reporte_ordenes_trabajo,
-            generar_reporte_uso_vehiculo,
-            generar_reporte_mantenimientos_recurrentes,
-            generar_reporte_por_site,
-            generar_reporte_cumplimiento_politica,
-            generar_reporte_inventario_caracteristicas
         )
         from datetime import datetime, timedelta
         
@@ -511,35 +506,42 @@ class ReportePDFView(views.APIView):
                     site=site
                 )
             elif tipo_reporte == "uso_vehiculo":
-                patente = request.query_params.get("patente")
-                if not fecha_inicio:
-                    fecha_fin = timezone.now().date()
-                    fecha_inicio = fecha_fin - timedelta(days=365)
-                if not fecha_fin:
-                    fecha_fin = timezone.now().date()
-                pdf_bytes = generar_reporte_uso_vehiculo(
-                    patente=patente,
-                    fecha_inicio=fecha_inicio,
-                    fecha_fin=fecha_fin
+                # Función no implementada aún - usar reporte de órdenes de trabajo como alternativa
+                return Response(
+                    {"detail": "Reporte de uso de vehículo no está disponible aún. Use 'ordenes_trabajo'."},
+                    status=status.HTTP_400_BAD_REQUEST
                 )
             elif tipo_reporte == "mantenimientos":
-                pdf_bytes = generar_reporte_mantenimientos_recurrentes(fecha=fecha_inicio or timezone.now().date())
+                # Función no implementada aún
+                return Response(
+                    {"detail": "Reporte de mantenimientos recurrentes no está disponible aún."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             elif tipo_reporte == "por_site":
+                # Usar reporte de órdenes de trabajo con filtro de site
                 site = request.query_params.get("site")
                 if not fecha_inicio:
                     fecha_fin = timezone.now().date()
                     fecha_inicio = fecha_fin - timedelta(days=30)
                 if not fecha_fin:
                     fecha_fin = timezone.now().date()
-                pdf_bytes = generar_reporte_por_site(
-                    site=site,
+                pdf_bytes = generar_reporte_ordenes_trabajo(
                     fecha_inicio=fecha_inicio,
-                    fecha_fin=fecha_fin
+                    fecha_fin=fecha_fin,
+                    site=site
                 )
             elif tipo_reporte == "cumplimiento":
-                pdf_bytes = generar_reporte_cumplimiento_politica(fecha=fecha_inicio or timezone.now().date())
+                # Función no implementada aún
+                return Response(
+                    {"detail": "Reporte de cumplimiento y política no está disponible aún."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             elif tipo_reporte == "inventario":
-                pdf_bytes = generar_reporte_inventario_caracteristicas(fecha=fecha_inicio or timezone.now().date())
+                # Función no implementada aún
+                return Response(
+                    {"detail": "Reporte de inventario no está disponible aún."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             else:
                 return Response(
                     {"detail": f"Tipo de reporte '{tipo_reporte}' no válido."},

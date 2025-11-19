@@ -58,14 +58,43 @@ export default function PreferencesPage() {
   const guardar = async () => {
     setSaving(true);
     try {
-      // Obtener ID del perfil
+      // Obtener usuario
       const rUser = await fetch("/api/proxy/users/me/", { credentials: "include" });
       if (!rUser.ok) throw new Error("No se pudo obtener el usuario");
       const user = await rUser.json();
       
-      if (!user.profile?.id) throw new Error("No se encontró el perfil");
+      // Si no tiene perfil, el backend debería crearlo automáticamente
+      // Pero por si acaso, intentamos crear uno si no existe
+      if (!user.profile?.id) {
+        // Intentar crear perfil
+        try {
+          const rCreate = await fetch("/api/proxy/users/profiles/", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              first_name: user.first_name || "",
+              last_name: user.last_name || "",
+              ...preferences,
+            }),
+          });
 
-      // Actualizar perfil
+          if (rCreate.ok) {
+            toast.success("Preferencias guardadas correctamente");
+            // Actualizar localStorage
+            localStorage.setItem("notificaciones_sonido", preferences.notificaciones_sonido ? "true" : "false");
+            localStorage.setItem("notificaciones_push", preferences.notificaciones_push ? "true" : "false");
+            return;
+          }
+        } catch (createError) {
+          // Si falla la creación, mostrar mensaje más específico
+          console.error("Error al crear perfil:", createError);
+          toast.error("Error: El perfil no existe y no se pudo crear. Contacta al administrador.");
+          return;
+        }
+      }
+
+      // Actualizar perfil existente
       const r = await fetch(`/api/proxy/users/profiles/${user.profile.id}/`, {
         method: "PATCH",
         credentials: "include",
@@ -83,7 +112,7 @@ export default function PreferencesPage() {
       }
     } catch (error) {
       console.error("Error al guardar preferencias:", error);
-      toast.error("Error al guardar preferencias");
+      toast.error("Error al guardar preferencias: " + (error instanceof Error ? error.message : "Error desconocido"));
     } finally {
       setSaving(false);
     }

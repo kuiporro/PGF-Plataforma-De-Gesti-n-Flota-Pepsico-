@@ -61,6 +61,25 @@ class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer  # Serializer por defecto
     permission_classes = [UserPermission]  # Permisos personalizados
 
+    def get_queryset(self):
+        """
+        Filtra el queryset para ocultar el usuario 'admin' a todos excepto al propio admin.
+        
+        Reglas:
+        - Si el usuario autenticado es ADMIN: ve todos los usuarios (incluyendo admin)
+        - Si el usuario autenticado NO es ADMIN: excluye al usuario 'admin' de la lista
+        
+        Retorna:
+        - QuerySet filtrado según el rol del usuario
+        """
+        queryset = super().get_queryset()
+        
+        # Si el usuario autenticado no es ADMIN, excluir el usuario 'admin'
+        if self.request.user.is_authenticated and self.request.user.rol != "ADMIN":
+            queryset = queryset.exclude(username="admin")
+        
+        return queryset
+
     def perform_destroy(self, instance):
         """
         Eliminar usuario de forma segura.
@@ -178,6 +197,20 @@ class ProfileViewSet(viewsets.ModelViewSet):
         if self.request.user.is_staff:
             return Profile.objects.all()
         return Profile.objects.filter(user=self.request.user)
+    
+    def perform_create(self, serializer):
+        """
+        Crea un perfil asignando automáticamente el usuario actual.
+        
+        Si el usuario ya tiene un perfil, no se crea otro.
+        """
+        # Verificar si el usuario ya tiene un perfil
+        if hasattr(self.request.user, 'profile'):
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({"detail": "El usuario ya tiene un perfil."})
+        
+        # Asignar el usuario actual al perfil
+        serializer.save(user=self.request.user)
     
 class MeAPIView(APIView):
     """
@@ -455,6 +488,25 @@ class UsuarioListViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = User.objects.all().order_by('id')
     serializer_class = UsuarioListSerializer  # Serializer simplificado (menos campos)
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        """
+        Filtra el queryset para ocultar el usuario 'admin' a todos excepto al propio admin.
+        
+        Reglas:
+        - Si el usuario autenticado es ADMIN: ve todos los usuarios (incluyendo admin)
+        - Si el usuario autenticado NO es ADMIN: excluye al usuario 'admin' de la lista
+        
+        Retorna:
+        - QuerySet filtrado según el rol del usuario
+        """
+        queryset = super().get_queryset()
+        
+        # Si el usuario autenticado no es ADMIN, excluir el usuario 'admin'
+        if self.request.user.is_authenticated and self.request.user.rol != "ADMIN":
+            queryset = queryset.exclude(username="admin")
+        
+        return queryset
 
 
 class PasswordResetRequestView(APIView):
