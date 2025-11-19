@@ -53,7 +53,7 @@ Script bash para ejecutar pruebas con opciones.
 ### `run_tests.bat` (Windows)
 Script batch para ejecutar pruebas en Windows.
 
-## Ver Reportes
+## Visualizar Reportes
 
 Los reportes HTML se pueden abrir directamente en el navegador:
 - Reporte general: `test-results/reports/summary_all_*.html`
