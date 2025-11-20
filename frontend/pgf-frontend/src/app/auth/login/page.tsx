@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/store/auth";
+import PepsiCoLogo from "@/components/PepsiCoLogo";
+import PasswordInput from "@/components/PasswordInput";
 
 export default function LoginPage() {
   const [username, setU] = useState("");
@@ -80,17 +82,31 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-6">
-      <div className="w-full max-w-md">
-        <div className="bg-white dark:bg-gray-800 shadow-2xl rounded-2xl p-8 space-y-6">
-          {/* Header */}
-          <div className="text-center space-y-2">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-              PGF
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Plataforma de Gestión de Flota
-            </p>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#003DA5] via-[#0052CC] to-[#002D7A] dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 p-6 relative overflow-hidden">
+      {/* Elementos decorativos de fondo */}
+      <div className="absolute inset-0 opacity-10">
+        <div className="absolute top-0 left-0 w-96 h-96 bg-white rounded-full blur-3xl"></div>
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-white rounded-full blur-3xl"></div>
+      </div>
+      
+      <div className="w-full max-w-md relative z-10">
+        <div className="bg-white dark:bg-gray-800 shadow-2xl rounded-2xl p-8 space-y-6 border border-gray-100 dark:border-gray-700">
+          {/* Header con Logo */}
+          <div className="text-center space-y-4">
+            <div className="flex justify-center">
+              <PepsiCoLogo size="xl" variant="default" />
+            </div>
+            <div className="space-y-2">
+              <h1 className="text-3xl font-bold text-[#003DA5] dark:text-white">
+                PGF
+              </h1>
+              <p className="text-gray-600 dark:text-gray-400 font-medium">
+                Plataforma de Gestión de Flota
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-500">
+                PepsiCo
+              </p>
+            </div>
           </div>
 
           {/* Form */}
@@ -101,7 +117,7 @@ export default function LoginPage() {
               </label>
               <input
                 id="username"
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition-all"
+                className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-[#003DA5] focus:border-[#003DA5] dark:bg-gray-700 dark:text-white transition-all"
                 placeholder="Ingresa tu usuario"
                 value={username}
                 onChange={(e) => setU(e.target.value)}
@@ -110,21 +126,15 @@ export default function LoginPage() {
               />
             </div>
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Contraseña
-              </label>
-              <input
-                id="password"
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition-all"
-                type="password"
-                placeholder="Ingresa tu contraseña"
-                value={password}
-                onChange={(e) => setP(e.target.value)}
-                required
-                autoComplete="current-password"
-              />
-            </div>
+            <PasswordInput
+              id="password"
+              label="Contraseña"
+              value={password}
+              onChange={(e) => setP(e.target.value)}
+              placeholder="Ingresa tu contraseña"
+              required
+              autoComplete="current-password"
+            />
 
             {error && (
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
@@ -135,7 +145,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-3 px-4 rounded-lg transition-colors duration-200 shadow-md hover:shadow-lg disabled:cursor-not-allowed"
+              className="w-full bg-[#003DA5] hover:bg-[#002D7A] disabled:bg-gray-400 text-white font-semibold py-3.5 px-4 rounded-lg transition-all duration-200 shadow-lg hover:shadow-xl disabled:cursor-not-allowed transform hover:-translate-y-0.5 disabled:transform-none"
             >
               {loading ? (
                 <span className="flex items-center justify-center">
@@ -155,7 +165,7 @@ export default function LoginPage() {
           <div className="text-center mt-4">
             <a
               href="/auth/reset-password"
-              className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+              className="text-sm text-[#003DA5] dark:text-[#00B4E6] hover:underline font-medium transition-colors"
             >
               ¿Olvidaste tu contraseña?
             </a>

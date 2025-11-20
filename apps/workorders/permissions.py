@@ -34,6 +34,20 @@ ALLOWED_ROLES_CHANGE_STATE = {"MECANICO", "JEFE_TALLER"}
 # Roles que pueden asignar mecánicos (solo Jefe de Taller)
 ALLOWED_ROLES_ASSIGN = {"JEFE_TALLER"}
 
+# Roles que pueden crear evidencias (Mecánico, Supervisor, Admin, Guardia, Jefe de Taller)
+ALLOWED_ROLES_CREATE_EVIDENCIA = {"MECANICO", "SUPERVISOR", "ADMIN", "GUARDIA", "JEFE_TALLER"}
+
+# Roles que pueden ver/listar/descargar evidencias
+# Jefe de Taller: todas las evidencias de su Site
+# Supervisor Zonal: solo evidencias de su Site
+# Administrador: todas las evidencias
+# Mecánico: evidencias que él subió o de la OT en la que trabaja
+# Guardia: evidencias iniciales que registró
+ALLOWED_ROLES_VIEW_EVIDENCIA = {"JEFE_TALLER", "SUPERVISOR", "ADMIN", "MECANICO", "GUARDIA"}
+
+# Roles que pueden crear comentarios (Mecánico, Supervisor, Admin, Jefe de Taller)
+ALLOWED_ROLES_CREATE_COMENTARIO = {"MECANICO", "SUPERVISOR", "ADMIN", "JEFE_TALLER", "GUARDIA", "COORDINADOR_ZONA"}
+
 
 class WorkOrderPermission(BasePermission):
     """
@@ -51,10 +65,73 @@ class WorkOrderPermission(BasePermission):
 
         # Métodos de lectura: todos los roles autorizados pueden leer
         if request.method in SAFE_METHODS:
+            # Para evidencias, usar permisos específicos
+            is_evidencia_view = False
+            if view:
+                serializer_class = getattr(view, 'serializer_class', None)
+                if serializer_class:
+                    serializer_name = serializer_class.__name__ if hasattr(serializer_class, '__name__') else ""
+                    is_evidencia_view = "Evidencia" in serializer_name
+                
+                if not is_evidencia_view:
+                    view_class_name = view.__class__.__name__ if hasattr(view, '__class__') else ""
+                    is_evidencia_view = "Evidencia" in view_class_name
+                
+                if not is_evidencia_view:
+                    queryset = getattr(view, 'queryset', None)
+                    if queryset and hasattr(queryset, 'model'):
+                        model_name = queryset.model.__name__ if hasattr(queryset.model, '__name__') else ""
+                        is_evidencia_view = "Evidencia" in model_name
+            
+            if not is_evidencia_view and hasattr(request, 'path'):
+                is_evidencia_view = "/evidencias/" in request.path or "/evidencia/" in request.path
+            
+            if is_evidencia_view:
+                return rol in ALLOWED_ROLES_VIEW_EVIDENCIA
+            
             return rol in ALLOWED_ROLES_READ
 
         # Métodos de escritura: según el rol específico
         action = getattr(view, 'action', None) if view else None
+        
+        # Detectar si es EvidenciaViewSet
+        # Método más confiable: verificar el serializer_class o el queryset
+        is_evidencia_view = False
+        is_comentario_view = False
+        if view:
+            # Método 1: Por serializer_class (más confiable)
+            serializer_class = getattr(view, 'serializer_class', None)
+            if serializer_class:
+                serializer_name = serializer_class.__name__ if hasattr(serializer_class, '__name__') else ""
+                is_evidencia_view = "Evidencia" in serializer_name
+                is_comentario_view = "Comentario" in serializer_name
+            
+            # Método 2: Por nombre de clase
+            if not is_evidencia_view and not is_comentario_view:
+                view_class_name = view.__class__.__name__ if hasattr(view, '__class__') else ""
+                is_evidencia_view = "Evidencia" in view_class_name
+                is_comentario_view = "Comentario" in view_class_name
+            
+            # Método 3: Por queryset model
+            if not is_evidencia_view and not is_comentario_view:
+                queryset = getattr(view, 'queryset', None)
+                if queryset and hasattr(queryset, 'model'):
+                    model_name = queryset.model.__name__ if hasattr(queryset.model, '__name__') else ""
+                    is_evidencia_view = "Evidencia" in model_name
+                    is_comentario_view = "Comentario" in model_name
+        
+        # Método 4: Por path de la URL (fallback)
+        if not is_evidencia_view and not is_comentario_view and hasattr(request, 'path'):
+            is_evidencia_view = "/evidencias/" in request.path or "/evidencia/" in request.path
+            is_comentario_view = "/comentarios/" in request.path or "/comentario/" in request.path
+        
+        # Crear evidencia: Mecánico, Supervisor, Admin, Guardia, Jefe de Taller
+        if request.method == "POST" and action == "create" and is_evidencia_view:
+            return rol in ALLOWED_ROLES_CREATE_EVIDENCIA
+        
+        # Crear comentario: Mecánico, Supervisor, Admin, Jefe de Taller, Guardia, Coordinador
+        if request.method == "POST" and action == "create" and is_comentario_view:
+            return rol in ALLOWED_ROLES_CREATE_COMENTARIO
         
         # Crear OT: solo Jefe de Taller y Admin
         if request.method == "POST" and action == "create":
@@ -84,6 +161,52 @@ class WorkOrderPermission(BasePermission):
 
         rol = getattr(request.user, "rol", None)
         action = getattr(view, 'action', None) if view else None
+        
+        # Validar permisos específicos para evidencias
+        from .models import Evidencia
+        if isinstance(obj, Evidencia):
+            # Jefe de Taller: puede ver todas las evidencias de su Site
+            if rol == "JEFE_TALLER":
+                if obj.ot and obj.ot.vehiculo:
+                    # Verificar que el vehículo pertenezca al mismo Site del Jefe de Taller
+                    user_site = getattr(request.user, 'profile', None)
+                    if user_site and hasattr(user_site, 'site'):
+                        return obj.ot.vehiculo.site == user_site.site
+                    # Si no tiene site configurado, permitir acceso (fallback)
+                    return True
+                return True  # Permitir acceso a evidencias sin OT
+            
+            # Supervisor Zonal: solo evidencias de su Site
+            if rol == "SUPERVISOR":
+                if obj.ot and obj.ot.vehiculo:
+                    user_site = getattr(request.user, 'profile', None)
+                    if user_site and hasattr(user_site, 'site'):
+                        return obj.ot.vehiculo.site == user_site.site
+                    return False
+                return False
+            
+            # Administrador: acceso total
+            if rol == "ADMIN":
+                return True
+            
+            # Mecánico: solo evidencias que él subió o de la OT en la que trabaja
+            if rol == "MECANICO":
+                # Puede ver si él la subió
+                if obj.subido_por == request.user:
+                    return True
+                # Puede ver si es de una OT asignada a él
+                if obj.ot and obj.ot.mecanico == request.user:
+                    return True
+                return False
+            
+            # Guardia: solo evidencias iniciales que registró
+            if rol == "GUARDIA":
+                # Puede ver si él la subió
+                if obj.subido_por == request.user:
+                    return True
+                # Puede ver evidencias de ingreso/salida relacionadas con sus registros
+                # (esto se puede refinar más adelante)
+                return False
         
         # CHOFER solo puede ver OT de su vehículo asignado
         if rol == "CHOFER":

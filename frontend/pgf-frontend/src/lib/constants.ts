@@ -38,33 +38,40 @@ export const ENDPOINTS = {
   LOGIN: `${API_BASE}/api/v1/auth/login/`,
   REFRESH: `${API_BASE}/api/v1/auth/refresh/`,
   ME: `${API_BASE}/api/v1/users/me/`,
-  USERS: `${API_BASE}/api/v1/users/`,
+  USERS: `/api/proxy/users/`,
 
   // Workorders
-  WORK_ORDERS: `${API_BASE}/api/v1/work/ordenes/`,
+  WORK_ORDERS: `/api/proxy/work/ordenes/`,
+  WORK_ORDER: (id: string) => `/api/proxy/work/ordenes/${id}/`,
   WORK_ORDERS_MOVE: (id: string, accion: string) =>
     `${API_BASE}/api/v1/work/ordenes/${id}/${accion}/`,
   WORK_ORDERS_TIMELINE: (id: string) =>
     `/api/proxy/work/ordenes/${id}/timeline/`,
   WORK_ITEMS: `${API_BASE}/api/v1/work/items/`,
   WORK_COMENTARIOS: `/api/proxy/work/comentarios/`,
+  WORK_PAUSAS: `/api/proxy/work/pausas/`,
 
   // Evidencias
-  EVIDENCES: `${API_BASE}/api/v1/work/evidencias/`,
-  EVIDENCE_PRESIGN: `${API_BASE}/api/v1/work/evidencias/presigned/`,
+  EVIDENCES: `/api/proxy/work/evidencias/`,
+  EVIDENCE_PRESIGN: `/api/proxy/work/evidencias/presigned/`,
   EVIDENCE_INVALIDAR: (id: string) =>
     `/api/proxy/work/evidencias/${id}/invalidar/`,
 
+  // Drivers/Choferes
+  DRIVERS: `/api/proxy/drivers/choferes/`,
+  DRIVER: (id: string) => `/api/proxy/drivers/choferes/${id}/`,
+  DRIVER_ASIGNAR_VEHICULO: (id: string) => `/api/proxy/drivers/choferes/${id}/asignar-vehiculo/`,
+  DRIVER_HISTORIAL: (id: string) => `/api/proxy/drivers/choferes/${id}/historial/`,
+
   // Vehicles
-  VEHICLES: `${API_BASE}/api/v1/vehicles`,
+  VEHICLES: `/api/proxy/vehicles/`,
   VEHICLES_INGRESO: `/api/proxy/vehicles/ingreso/`,
   VEHICLES_SALIDA: `/api/proxy/vehicles/salida/`,
   VEHICLES_INGRESOS_HOY: `/api/proxy/vehicles/ingresos-hoy/`,
+  VEHICLES_INGRESOS_HISTORIAL: `/api/proxy/vehicles/ingresos-historial/`,
   VEHICLES_TICKET_INGRESO: (ingresoId: string) => `/api/proxy/vehicles/ingreso/${ingresoId}/ticket/`,
   VEHICLES_BLOQUEOS: `${API_BASE}/api/v1/vehicles/bloqueos/`,
   
-  // Drivers (Choferes)
-  DRIVERS: `${API_BASE}/api/v1/drivers/`,
   
   // Scheduling (Agenda)
   SCHEDULING: `${API_BASE}/api/v1/scheduling/`,
@@ -78,9 +85,11 @@ export const ENDPOINTS = {
   REPORTS_PDF: `${API_BASE}/api/v1/reports/pdf/`,
   
   // Notifications
-  NOTIFICATIONS: `${API_BASE}/api/v1/notifications/`,
-  NOTIFICATIONS_NO_LEIDAS: `${API_BASE}/api/v1/notifications/no-leidas/`,
-  NOTIFICATIONS_CONTADOR: `${API_BASE}/api/v1/notifications/contador/`,
+  NOTIFICATIONS: `/api/proxy/notifications/`,
+  NOTIFICATIONS_NO_LEIDAS: `/api/proxy/notifications/no-leidas/`,
+  NOTIFICATIONS_CONTADOR: `/api/proxy/notifications/contador/`,
+  NOTIFICATION: (id: string) => `/api/proxy/notifications/${id}/`,
+  NOTIFICATION_MARCAR_LEIDA: (id: string) => `/api/proxy/notifications/${id}/marcar-leida/`,
 } as const;
 
 // -------------------------------------------

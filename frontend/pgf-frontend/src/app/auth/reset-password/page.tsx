@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useToast } from "@/components/ToastContainer";
+import PasswordInput from "@/components/PasswordInput";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -163,37 +164,27 @@ export default function ResetPasswordPage() {
               </div>
             )}
 
-            <div>
-              <label htmlFor="new_password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Nueva Contraseña
-              </label>
-              <input
-                id="new_password"
-                type="password"
-                required
-                minLength={8}
-                value={formData.new_password}
-                onChange={(e) => setFormData({ ...formData, new_password: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition-all"
-                placeholder="Mínimo 8 caracteres"
-              />
-            </div>
+            <PasswordInput
+              id="new_password"
+              label="Nueva Contraseña"
+              value={formData.new_password}
+              onChange={(e) => setFormData({ ...formData, new_password: e.target.value })}
+              placeholder="Mínimo 8 caracteres"
+              required
+              minLength={8}
+              autoComplete="new-password"
+            />
 
-            <div>
-              <label htmlFor="confirm_password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Confirmar Contraseña
-              </label>
-              <input
-                id="confirm_password"
-                type="password"
-                required
-                minLength={8}
-                value={formData.confirm_password}
-                onChange={(e) => setFormData({ ...formData, confirm_password: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition-all"
-                placeholder="Repite la contraseña"
-              />
-            </div>
+            <PasswordInput
+              id="confirm_password"
+              label="Confirmar Contraseña"
+              value={formData.confirm_password}
+              onChange={(e) => setFormData({ ...formData, confirm_password: e.target.value })}
+              placeholder="Repite la contraseña"
+              required
+              minLength={8}
+              autoComplete="new-password"
+            />
 
             <button
               type="submit"

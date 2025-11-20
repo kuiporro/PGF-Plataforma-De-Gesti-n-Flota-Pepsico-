@@ -95,7 +95,25 @@ export async function proxyFetch(
 
   // Construir la URL completa del endpoint
   // API_BASE ya incluye "/api/v1", endpoint es la ruta relativa
-  const url = `${API_BASE}${endpoint}`;
+  // Asegurar que endpoint empiece con / si no lo hace
+  const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const url = `${API_BASE}${normalizedEndpoint}`;
+  
+  // Log para debugging (solo en desarrollo)
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`[proxyFetch] Requesting: ${url}`, { endpoint, normalizedEndpoint, API_BASE });
+  }
+  
+  // Validar que la URL es válida
+  try {
+    new URL(url);
+  } catch (error) {
+    console.error(`[proxyFetch] Invalid URL constructed: ${url}`, error);
+    return NextResponse.json(
+      { detail: `Invalid endpoint URL: ${endpoint}` },
+      { status: 500 }
+    );
+  }
 
   // Preparar opciones de fetch
   // Se combinan las opciones pasadas con las opciones por defecto
@@ -184,8 +202,25 @@ export async function proxyFetch(
    * { "field": ["error1", "error2"] } para errores de validación
    */
   if (!r.ok) {
+    // Si json es null o no tiene detail, intentar extraer información útil
+    if (!json || typeof json !== 'object') {
+      return NextResponse.json(
+        { 
+          detail: `Backend error: ${r.status} ${r.statusText}`,
+          status: r.status,
+          statusText: r.statusText
+        },
+        { status: r.status }
+      );
+    }
+    
+    // Si json tiene detail o message, usarlo; si no, usar el objeto completo
+    const errorDetail = json.detail || json.message || JSON.stringify(json);
     return NextResponse.json(
-      { detail: "Backend error", raw: json },  // Incluir respuesta completa para debugging
+      { 
+        detail: errorDetail,
+        ...json  // Incluir toda la información del error del backend
+      },
       { status: r.status }
     );
   }

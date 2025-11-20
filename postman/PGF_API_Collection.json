@@ -40,8 +40,14 @@
             },
             "url": {
               "raw": "{{base_url}}/auth/login/",
-              "host": ["{{base_url}}"],
-              "path": ["auth", "login", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login",
+                ""
+              ]
             }
           }
         },
@@ -52,8 +58,14 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/auth/refresh/",
-              "host": ["{{base_url}}"],
-              "path": ["auth", "refresh", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "refresh",
+                ""
+              ]
             }
           }
         },
@@ -69,8 +81,14 @@
             ],
             "url": {
               "raw": "{{base_url}}/users/me/",
-              "host": ["{{base_url}}"],
-              "path": ["users", "me", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "me",
+                ""
+              ]
             }
           }
         }
@@ -91,8 +109,13 @@
             ],
             "url": {
               "raw": "{{base_url}}/users/?page=1&page_size=20",
-              "host": ["{{base_url}}"],
-              "path": ["users", ""],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                ""
+              ],
               "query": [
                 {
                   "key": "page",
@@ -126,8 +149,13 @@
             },
             "url": {
               "raw": "{{base_url}}/users/",
-              "host": ["{{base_url}}"],
-              "path": ["users", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                ""
+              ]
             }
           }
         },
@@ -143,8 +171,14 @@
             ],
             "url": {
               "raw": "{{base_url}}/users/{{user_id}}/",
-              "host": ["{{base_url}}"],
-              "path": ["users", "{{user_id}}", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "{{user_id}}",
+                ""
+              ]
             }
           }
         }
@@ -165,8 +199,13 @@
             ],
             "url": {
               "raw": "{{base_url}}/vehicles/?page=1&page_size=20",
-              "host": ["{{base_url}}"],
-              "path": ["vehicles", ""],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "vehicles",
+                ""
+              ],
               "query": [
                 {
                   "key": "page",
@@ -200,8 +239,139 @@
             },
             "url": {
               "raw": "{{base_url}}/vehicles/",
-              "host": ["{{base_url}}"],
-              "path": ["vehicles", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "vehicles",
+                ""
+              ]
+            }
+          }
+        },
+        {
+          "name": "Registrar Ingreso",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.environment.set('ingreso_id', jsonData.id);",
+                  "    if (jsonData.ot_generada) {",
+                  "        pm.environment.set('ot_id', jsonData.ot_generada.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patente\": \"ABC123\",\n  \"observaciones\": \"Ingreso para mantención\",\n  \"kilometraje\": 45000\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/vehicles/ingreso/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "vehicles",
+                "ingreso",
+                ""
+              ]
+            }
+          }
+        },
+        {
+          "name": "Registrar Salida",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ingreso_id\": \"{{ingreso_id}}\",\n  \"observaciones_salida\": \"Vehículo listo\",\n  \"kilometraje_salida\": 50000\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/vehicles/salida/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "vehicles",
+                "salida",
+                ""
+              ]
+            }
+          }
+        },
+        {
+          "name": "Ingresos del Día",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/vehicles/ingresos-hoy/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "vehicles",
+                "ingresos-hoy",
+                ""
+              ]
+            }
+          }
+        },
+        {
+          "name": "Generar Ticket PDF",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/vehicles/ingreso/{{ingreso_id}}/ticket/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "vehicles",
+                "ingreso",
+                "{{ingreso_id}}",
+                "ticket",
+                ""
+              ]
             }
           }
         }
@@ -222,8 +392,14 @@
             ],
             "url": {
               "raw": "{{base_url}}/work/ordenes/?page=1&page_size=20",
-              "host": ["{{base_url}}"],
-              "path": ["work", "ordenes", ""],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "work",
+                "ordenes",
+                ""
+              ],
               "query": [
                 {
                   "key": "page",
@@ -270,8 +446,14 @@
             },
             "url": {
               "raw": "{{base_url}}/work/ordenes/",
-              "host": ["{{base_url}}"],
-              "path": ["work", "ordenes", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "work",
+                "ordenes",
+                ""
+              ]
             }
           }
         },
@@ -287,8 +469,100 @@
             ],
             "url": {
               "raw": "{{base_url}}/work/ordenes/{{ot_id}}/",
-              "host": ["{{base_url}}"],
-              "path": ["work", "ordenes", "{{ot_id}}", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "work",
+                "ordenes",
+                "{{ot_id}}",
+                ""
+              ]
+            }
+          }
+        },
+        {
+          "name": "Timeline de OT",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/work/ordenes/{{ot_id}}/timeline/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "work",
+                "ordenes",
+                "{{ot_id}}",
+                "timeline",
+                ""
+              ]
+            }
+          }
+        },
+        {
+          "name": "Listar Comentarios",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/work/comentarios/?ot={{ot_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "work",
+                "comentarios",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "ot",
+                  "value": "{{ot_id}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Crear Comentario",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ot\": \"{{ot_id}}\",\n  \"contenido\": \"Comentario de prueba con @usuario\",\n  \"menciones\": [\"@supervisor_test\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/work/comentarios/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "work",
+                "comentarios",
+                ""
+              ]
             }
           }
         }
@@ -331,8 +605,15 @@
             },
             "url": {
               "raw": "{{base_url}}/work/evidencias/presigned/",
-              "host": ["{{base_url}}"],
-              "path": ["work", "evidencias", "presigned", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "work",
+                "evidencias",
+                "presigned",
+                ""
+              ]
             }
           }
         },
@@ -348,8 +629,14 @@
             ],
             "url": {
               "raw": "{{base_url}}/work/evidencias/?ot={{ot_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["work", "evidencias", ""],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "work",
+                "evidencias",
+                ""
+              ],
               "query": [
                 {
                   "key": "ot",
@@ -379,8 +666,47 @@
             },
             "url": {
               "raw": "{{base_url}}/work/evidencias/",
-              "host": ["{{base_url}}"],
-              "path": ["work", "evidencias", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "work",
+                "evidencias",
+                ""
+              ]
+            }
+          }
+        },
+        {
+          "name": "Invalidar Evidencia",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"motivo\": \"Evidencia incorrecta, requiere retomar\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/work/evidencias/{{evidencia_id}}/invalidar/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "work",
+                "evidencias",
+                "{{evidencia_id}}",
+                "invalidar",
+                ""
+              ]
             }
           }
         }
@@ -401,8 +727,14 @@
             ],
             "url": {
               "raw": "{{base_url}}/reports/dashboard-ejecutivo/",
-              "host": ["{{base_url}}"],
-              "path": ["reports", "dashboard-ejecutivo", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "dashboard-ejecutivo",
+                ""
+              ]
             }
           }
         },
@@ -418,8 +750,14 @@
             ],
             "url": {
               "raw": "{{base_url}}/reports/pdf/?tipo=diario&fecha_inicio=2025-11-19",
-              "host": ["{{base_url}}"],
-              "path": ["reports", "pdf", ""],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "pdf",
+                ""
+              ],
               "query": [
                 {
                   "key": "tipo",
@@ -466,7 +804,16 @@
       "key": "vehicle_id",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "ingreso_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "evidencia_id",
+      "value": "",
+      "type": "string"
     }
   ]
 }
-

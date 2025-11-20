@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { API_BASE } from "@/lib/constants";
+import { API_BASE } from "../../../utils";
 
 /**
  * Proxy endpoint para generar PDF del ticket de ingreso.
@@ -16,9 +16,9 @@ export async function GET(
   try {
     const ingresoId = params.ingresoId;
     const cookieStore = await cookies();
-    const accessToken = cookieStore.get("access_token")?.value;
+    const token = cookieStore.get("pgf_access")?.value;
 
-    if (!accessToken) {
+    if (!token) {
       return NextResponse.json(
         { detail: "No autenticado" },
         { status: 401 }
@@ -26,17 +26,27 @@ export async function GET(
     }
 
     // Llamar al backend
-    const backendUrl = `${API_BASE}/api/v1/vehicles/ingreso/${ingresoId}/ticket/`;
+    const backendUrl = `${API_BASE}/vehicles/ingreso/${ingresoId}/ticket/`;
     const response = await fetch(backendUrl, {
       method: "GET",
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${token}`,
       },
+      cache: "no-store",
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: "Error al generar ticket" }));
-      return NextResponse.json(error, { status: response.status });
+      // Intentar leer como JSON primero
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        const error = await response.json().catch(() => ({ detail: "Error al generar ticket" }));
+        return NextResponse.json(error, { status: response.status });
+      }
+      // Si no es JSON, retornar error genérico
+      return NextResponse.json(
+        { detail: `Error ${response.status}: ${response.statusText}` },
+        { status: response.status }
+      );
     }
 
     // Retornar el PDF

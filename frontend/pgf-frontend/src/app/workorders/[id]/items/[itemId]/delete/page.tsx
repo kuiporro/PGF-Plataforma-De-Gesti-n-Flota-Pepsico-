@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useToast } from "@/components/ToastContainer";
 import ConfirmDialog from "@/components/ConfirmDialog";
 
-export default function DeleteItem({ params }: any) {
-  const { id, itemId } = params;
+export default function DeleteItem() {
+  const params = useParams();
+  const id = params.id as string;
+  const itemId = params.itemId as string;
   const router = useRouter();
   const toast = useToast();
   const [showConfirm, setShowConfirm] = useState(true);

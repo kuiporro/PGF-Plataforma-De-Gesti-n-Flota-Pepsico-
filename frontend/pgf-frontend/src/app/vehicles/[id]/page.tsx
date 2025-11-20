@@ -17,13 +17,24 @@ export default function VehicleDetail() {
 
   useEffect(() => {
     const load = async () => {
+      // Validar que el ID existe y no es undefined
+      if (!id || id === "undefined" || id.trim() === "") {
+        toast.error("ID de vehículo no válido");
+        router.push("/vehicles");
+        return;
+      }
+
       try {
         const r = await fetch(`/api/proxy/vehicles/${id}/`, {
           credentials: "include",
         });
 
         if (!r.ok) {
-          toast.error("Error al cargar el vehículo");
+          if (r.status === 404) {
+            toast.error("Vehículo no encontrado");
+          } else {
+            toast.error("Error al cargar el vehículo");
+          }
           router.push("/vehicles");
           return;
         }

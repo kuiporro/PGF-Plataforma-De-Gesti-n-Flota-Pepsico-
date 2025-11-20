@@ -43,8 +43,8 @@ export default function Topbar() {
   }
 
   return (
-    <header className="h-16 bg-white dark:bg-gray-800 shadow flex items-center justify-between px-6 border-b border-gray-200 dark:border-gray-700">
-      <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
+    <header className="h-16 bg-white dark:bg-gray-800 shadow-lg flex items-center justify-between px-6 border-b-2 border-[#003DA5]/20 dark:border-[#003DA5]/30">
+      <h1 className="text-xl font-bold text-[#003DA5] dark:text-white">
         Panel de Administración
       </h1>
 
@@ -62,7 +62,7 @@ export default function Topbar() {
                 {user.rol}
               </p>
             </div>
-            <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-semibold">
+            <div className="w-10 h-10 rounded-full bg-[#003DA5] flex items-center justify-center text-white font-semibold shadow-md">
               {user.first_name?.[0]}{user.last_name?.[0]}
             </div>
           </div>
@@ -72,13 +72,13 @@ export default function Topbar() {
           <>
             <a
               href="/profile/preferences"
-              className="px-3 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg transition-colors duration-200 text-sm font-medium"
+              className="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-[#003DA5]/10 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg transition-all duration-200 text-sm font-medium border border-gray-200 dark:border-gray-600 hover:border-[#003DA5]/30"
             >
               Preferencias
             </a>
             <a
               href="/profile/change-password"
-              className="px-3 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg transition-colors duration-200 text-sm font-medium"
+              className="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-[#003DA5]/10 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg transition-all duration-200 text-sm font-medium border border-gray-200 dark:border-gray-600 hover:border-[#003DA5]/30"
             >
               Cambiar Contraseña
             </a>
@@ -87,7 +87,7 @@ export default function Topbar() {
 
         <button
           onClick={logout}
-          className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors duration-200 text-sm font-medium shadow-sm hover:shadow"
+          className="px-4 py-2 bg-[#E60012] hover:bg-[#CC0010] text-white rounded-lg transition-all duration-200 text-sm font-semibold shadow-md hover:shadow-lg transform hover:-translate-y-0.5"
         >
           Cerrar sesión
         </button>

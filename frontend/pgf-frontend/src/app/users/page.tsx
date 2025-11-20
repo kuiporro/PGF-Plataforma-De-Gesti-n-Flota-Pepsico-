@@ -5,18 +5,43 @@ import Link from "next/link";
 import RoleGuard from "@/components/RoleGuard";
 import Pagination from "@/components/Pagination";
 
+const ROLES = [
+  { value: "", label: "Todos los roles" },
+  { value: "ADMIN", label: "Administrador" },
+  { value: "GUARDIA", label: "Guardia de Portería" },
+  { value: "CHOFER", label: "Chofer" },
+  { value: "MECANICO", label: "Mecánico" },
+  { value: "JEFE_TALLER", label: "Jefe de Taller" },
+  { value: "SUPERVISOR", label: "Supervisor Zonal" },
+  { value: "COORDINADOR_ZONA", label: "Coordinador de Zona" },
+  { value: "RECEPCIONISTA", label: "Recepcionista" },
+  { value: "EJECUTIVO", label: "Ejecutivo" },
+  { value: "SPONSOR", label: "Sponsor" },
+];
+
 export default function UsersPage() {
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
+  const [rolFiltro, setRolFiltro] = useState<string>("");
   const itemsPerPage = 20;
 
   useEffect(() => {
     async function load(page: number = 1) {
       try {
-        const r = await fetch(`/api/proxy/users/?page=${page}&page_size=${itemsPerPage}`, {
+        // Construir URL con filtros
+        const params = new URLSearchParams({
+          page: page.toString(),
+          page_size: itemsPerPage.toString(),
+        });
+        
+        if (rolFiltro) {
+          params.append("rol", rolFiltro);
+        }
+        
+        const r = await fetch(`/api/proxy/users/?${params.toString()}`, {
           credentials: "include",
         });
         
@@ -48,7 +73,7 @@ export default function UsersPage() {
     }
 
     load(currentPage);
-  }, [currentPage]);
+  }, [currentPage, rolFiltro]);
 
   return (
     <RoleGuard allow={["ADMIN", "SUPERVISOR"]}>
@@ -63,8 +88,63 @@ export default function UsersPage() {
           </Link>
         </div>
 
-      {loading && <p className="text-gray-500">Cargando...</p>}
-      {!loading && rows.length === 0 && <p className="text-gray-500">No hay usuarios registrados.</p>}
+        {/* Filtros */}
+        <div className="mb-6 flex items-center gap-4">
+          <div className="flex-1">
+            <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+              Filtrar por Rol
+            </label>
+            <select
+              value={rolFiltro}
+              onChange={(e) => {
+                setRolFiltro(e.target.value);
+                setCurrentPage(1); // Resetear a la primera página al cambiar el filtro
+              }}
+              className="w-full md:w-64 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              {ROLES.map((rol) => (
+                <option key={rol.value} value={rol.value}>
+                  {rol.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {rolFiltro && (
+            <div className="flex items-end">
+              <button
+                onClick={() => {
+                  setRolFiltro("");
+                  setCurrentPage(1);
+                }}
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium text-sm"
+              >
+                Limpiar Filtro
+              </button>
+            </div>
+          )}
+        </div>
+
+      {loading && <p className="text-gray-500 dark:text-gray-400">Cargando...</p>}
+      {!loading && rows.length === 0 && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 text-center">
+          <p className="text-gray-500 dark:text-gray-400">
+            {rolFiltro
+              ? `No hay usuarios con el rol "${ROLES.find((r) => r.value === rolFiltro)?.label || rolFiltro}" registrados.`
+              : "No hay usuarios registrados."}
+          </p>
+          {rolFiltro && (
+            <button
+              onClick={() => {
+                setRolFiltro("");
+                setCurrentPage(1);
+              }}
+              className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium text-sm"
+            >
+              Ver todos los usuarios
+            </button>
+          )}
+        </div>
+      )}
 
       {!loading && rows.length > 0 && (
         <div className="overflow-x-auto border rounded-lg">

@@ -6,6 +6,7 @@ import { useToast } from "@/components/ToastContainer";
 import { validateRequired, validateEmail, validateMinLength } from "@/lib/validations";
 import RoleGuard from "@/components/RoleGuard";
 import { ALL_ROLES } from "@/lib/constants";
+import PasswordInput from "@/components/PasswordInput";
 
 export default function EditUser() {
   const params = useParams();
@@ -243,10 +244,9 @@ export default function EditUser() {
             </div>
             {showPasswordField && (
               <div>
-                <input
-                  type="password"
-                  placeholder="Nueva contraseña (mínimo 8 caracteres)"
-                  className={`input w-full ${errors.password ? "border-red-500" : ""}`}
+                <PasswordInput
+                  id="new_password"
+                  label="Nueva Contraseña"
                   value={newPassword}
                   onChange={(e) => {
                     setNewPassword(e.target.value);
@@ -254,10 +254,11 @@ export default function EditUser() {
                       setErrors({ ...errors, password: "" });
                     }
                   }}
+                  placeholder="Nueva contraseña (mínimo 8 caracteres)"
+                  minLength={8}
+                  autoComplete="new-password"
+                  error={errors.password}
                 />
-                {errors.password && (
-                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.password}</p>
-                )}
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   Deja vacío si no deseas cambiar la contraseña. Mínimo 8 caracteres.
                 </p>

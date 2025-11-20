@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { ENDPOINTS } from "@/lib/constants";
 import { withSession } from "@/lib/api.client";
-import { useRouter } from "next/navigation";
 
-export default function CreateItem({ params }: any) {
-  const otId = params.id;
+export default function CreateItem() {
+  const params = useParams();
+  const otId = params.id as string;
   const router = useRouter();
 
   const [form, setForm] = useState({

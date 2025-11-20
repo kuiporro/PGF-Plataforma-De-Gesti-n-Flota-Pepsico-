@@ -4,10 +4,24 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ToastContainer";
 import { validateVehicle } from "@/lib/validations";
+import { useAuth } from "@/store/auth";
+import { handleApiError, getRoleHomePage } from "@/lib/permissions";
 
 export default function CreateVehicle() {
   const router = useRouter();
   const toast = useToast();
+  const { hasRole, user } = useAuth();
+  
+  // Verificar permisos: ADMIN, JEFE_TALLER, COORDINADOR_ZONA pueden crear
+  const canCreate = hasRole(["ADMIN", "JEFE_TALLER", "COORDINADOR_ZONA"]);
+  
+  if (!canCreate) {
+    toast.error("Permisos insuficientes. No tiene acceso para crear vehículos.");
+    setTimeout(() => {
+      router.push(getRoleHomePage(user?.rol));
+    }, 2000);
+    return null;
+  }
   const [form, setForm] = useState({
     patente: "",
     marca: "",
@@ -57,7 +71,14 @@ export default function CreateVehicle() {
       }
 
       if (!r.ok) {
-        toast.error(data.detail || "Error al crear el vehículo");
+        if (r.status === 403) {
+          toast.error("Permisos insuficientes. No tiene acceso para crear vehículos.");
+          setTimeout(() => {
+            router.push(getRoleHomePage(user?.rol));
+          }, 2000);
+          return;
+        }
+        handleApiError({ status: r.status, detail: data.detail }, router, toast, user?.rol);
         if (data.errors) {
           setErrors(data.errors);
         }

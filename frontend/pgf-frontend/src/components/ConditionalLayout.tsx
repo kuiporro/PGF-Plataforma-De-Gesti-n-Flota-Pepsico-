@@ -5,6 +5,7 @@ import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
 import ThemeToggle from "@/components/ThemeToggle";
 import ToastContainer from "@/components/ToastContainer";
+import PepsiCoLogo from "@/components/PepsiCoLogo";
 
 export default function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -27,7 +28,11 @@ export default function ConditionalLayout({ children }: { children: React.ReactN
       <Sidebar />
       <div className="flex-1 flex flex-col ml-64 transition-all duration-300">
         <Topbar />
-        <main className="flex-1 p-6 min-h-screen text-gray-800 dark:text-gray-200 transition-colors duration-300">
+        <main className="flex-1 p-6 min-h-screen text-gray-800 dark:text-gray-200 transition-colors duration-300 relative">
+          {/* Logo en esquina superior derecha */}
+          <div className="fixed top-4 right-4 z-50 opacity-80 hover:opacity-100 transition-opacity">
+            <PepsiCoLogo size="sm" variant="default" />
+          </div>
           <ThemeToggle />
           {children}
         </main>

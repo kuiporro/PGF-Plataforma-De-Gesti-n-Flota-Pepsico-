@@ -46,7 +46,7 @@ export default function TimelineOTPage() {
     setLoading(true);
     try {
       // Cargar OT
-      const otResponse = await fetch(`${ENDPOINTS.WORK_ORDERS}${otId}/`, {
+      const otResponse = await fetch(ENDPOINTS.WORK_ORDER(otId), {
         method: "GET",
         ...withSession(),
       });

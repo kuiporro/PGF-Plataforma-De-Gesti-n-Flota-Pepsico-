@@ -6,6 +6,7 @@ import { useToast } from "@/components/ToastContainer";
 import { validateRequired, validateEmail, validateMinLength } from "@/lib/validations";
 import RoleGuard from "@/components/RoleGuard";
 import { ALL_ROLES } from "@/lib/constants";
+import PasswordInput from "@/components/PasswordInput";
 
 export default function CreateUser() {
   const router = useRouter();
@@ -81,10 +82,42 @@ export default function CreateUser() {
       }
 
       if (!r.ok) {
-        toast.error(data.detail || "Error al crear usuario");
-        if (data.errors) {
-          setErrors(data.errors);
+        // Manejar errores de validación del backend
+        const fieldErrors: Record<string, string> = {};
+        let generalError = "Error al crear usuario";
+        
+        // Si hay errores por campo (formato DRF estándar)
+        if (data.rut || data.email || data.password || data.username || data.first_name || data.last_name || data.rol) {
+          // Errores de campos específicos
+          Object.keys(data).forEach((key) => {
+            if (['rut', 'email', 'password', 'username', 'first_name', 'last_name', 'rol'].includes(key)) {
+              const errorValue = data[key];
+              if (Array.isArray(errorValue)) {
+                fieldErrors[key] = errorValue[0]; // Tomar el primer error
+              } else if (typeof errorValue === 'string') {
+                fieldErrors[key] = errorValue;
+              }
+            }
+          });
+          setErrors(fieldErrors);
+          
+          // Mostrar el primer error encontrado
+          const firstError = Object.values(fieldErrors)[0];
+          if (firstError) {
+            toast.error(firstError);
+          }
+        } else if (data.detail) {
+          // Error general
+          generalError = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
+          toast.error(generalError);
+        } else if (data.message) {
+          toast.error(data.message);
+        } else {
+          toast.error(generalError);
         }
+        
+        // Log para debugging
+        console.error("Error al crear usuario:", data);
         return;
       }
 
@@ -197,22 +230,19 @@ export default function CreateUser() {
           </div>
 
           <div>
-            <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-              Contraseña *
-            </label>
-            <input
-              type="password"
-              placeholder="Mínimo 8 caracteres"
-              className={`input w-full ${errors.password ? "border-red-500" : ""}`}
+            <PasswordInput
+              id="password"
+              label="Contraseña *"
               value={form.password}
               onChange={(e) => updateField("password", e.target.value)}
+              placeholder="Mínimo 8 caracteres"
+              required
+              autoComplete="new-password"
+              error={errors.password}
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               La contraseña debe tener al menos 8 caracteres
             </p>
-            {errors.password && (
-              <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.password}</p>
-            )}
           </div>
 
           <div>

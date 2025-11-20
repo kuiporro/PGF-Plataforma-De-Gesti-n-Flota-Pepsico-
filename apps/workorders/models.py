@@ -720,6 +720,16 @@ class Evidencia(models.Model):
     # Descripción opcional de la evidencia
     descripcion = models.TextField(blank=True, default="")
     
+    # Usuario que subió la evidencia
+    subido_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="evidencias_subidas",
+        help_text="Usuario que subió esta evidencia"
+    )
+    
     # Fecha de subida
     subido_en = models.DateTimeField(auto_now_add=True)
     

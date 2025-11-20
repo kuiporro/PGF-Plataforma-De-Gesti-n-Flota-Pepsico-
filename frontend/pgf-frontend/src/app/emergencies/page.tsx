@@ -27,7 +27,29 @@ export default function EmergenciesPage() {
           setRows([]);
           return;
         }
-        throw new Error(`HTTP ${r.status}`);
+        
+        // Intentar obtener el mensaje de error del backend
+        const errorText = await r.text().catch(() => "");
+        let errorMessage = `Error HTTP ${r.status}`;
+        
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+        } catch {
+          if (errorText) {
+            errorMessage = errorText;
+          }
+        }
+        
+        console.error("Error al cargar emergencias:", {
+          status: r.status,
+          statusText: r.statusText,
+          error: errorMessage,
+        });
+        
+        toast.error(errorMessage || `Error al cargar emergencias (HTTP ${r.status})`);
+        setRows([]);
+        return;
       }
       
       const text = await r.text();
@@ -39,9 +61,9 @@ export default function EmergenciesPage() {
       const j = JSON.parse(text);
       setRows(j.results ?? j ?? []);
       setTotalPages(Math.ceil((j.count || j.results?.length || 0) / itemsPerPage));
-    } catch (e) {
+    } catch (e: any) {
       console.error("Error cargando emergencias", e);
-      toast.error("Error al cargar emergencias");
+      toast.error(e.message || "Error al cargar emergencias");
       setRows([]);
     } finally {
       setLoading(false);

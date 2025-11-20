@@ -10,9 +10,9 @@ class UserPermission(BasePermission):
         if getattr(view, 'action', None) == 'me':
             return request.user and request.user.is_authenticated
 
-        # Listar todos solo admin/supervisor
+        # Listar todos: admin, supervisor, jefe de taller (necesita ver mecánicos para asignar)
         if view.action == 'list':
-            return request.user and request.user.is_authenticated and request.user.rol in ["ADMIN", "SUPERVISOR"]
+            return request.user and request.user.is_authenticated and request.user.rol in ["ADMIN", "SUPERVISOR", "JEFE_TALLER"]
 
         # Resto: autenticado
         return request.user and request.user.is_authenticated
@@ -28,7 +28,7 @@ class UserPermission(BasePermission):
             return request.user.rol == "ADMIN" and request.user.username == "admin"
 
         # Si no es el usuario admin, aplicar permisos normales
-        if request.user.rol in ["ADMIN", "SUPERVISOR"]:
+        if request.user.rol in ["ADMIN", "SUPERVISOR", "JEFE_TALLER"]:
             return True
 
         # Un usuario puede ver/editar su propio objeto

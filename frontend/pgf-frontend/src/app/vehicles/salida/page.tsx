@@ -35,7 +35,7 @@ export default function SalidaVehiculoPage() {
     kilometraje_salida: "",
   });
 
-  const canAccess = hasRole(["GUARDIA", "ADMIN"]);
+  const canAccess = hasRole(["GUARDIA", "ADMIN", "JEFE_TALLER"]);
 
   useEffect(() => {
     if (canAccess) {
@@ -83,15 +83,28 @@ export default function SalidaVehiculoPage() {
         },
         body: JSON.stringify({
           ingreso_id: ingresoId,
-          observaciones_salida: form.observaciones_salida.trim() || undefined,
-          kilometraje_salida: form.kilometraje_salida ? parseInt(form.kilometraje_salida) : undefined,
+          observaciones_salida: form.observaciones_salida.trim() || "",
+          kilometraje_salida: form.kilometraje_salida && form.kilometraje_salida.trim() 
+            ? parseInt(form.kilometraje_salida) 
+            : null,
         }),
       });
 
-      const data = await response.json();
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { detail: text || "Error desconocido" };
+      }
 
       if (!response.ok) {
-        toast.error(data.detail || "Error al registrar salida");
+        // Mostrar mensaje de error específico
+        const errorMessage = data.detail || data.message || "Error al registrar salida";
+        toast.error(errorMessage);
+        
+        // Log para debugging
+        console.error("Error al registrar salida:", data);
         setLoading(false);
         return;
       }
@@ -117,14 +130,14 @@ export default function SalidaVehiculoPage() {
 
   if (!canAccess) {
     return (
-      <RoleGuard allow={["GUARDIA", "ADMIN"]}>
+      <RoleGuard allow={["GUARDIA", "ADMIN", "JEFE_TALLER"]}>
         <div></div>
       </RoleGuard>
     );
   }
 
   return (
-    <RoleGuard allow={["GUARDIA", "ADMIN"]}>
+    <RoleGuard allow={["GUARDIA", "ADMIN", "JEFE_TALLER"]}>
       <div className="p-6 max-w-6xl mx-auto space-y-6">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">

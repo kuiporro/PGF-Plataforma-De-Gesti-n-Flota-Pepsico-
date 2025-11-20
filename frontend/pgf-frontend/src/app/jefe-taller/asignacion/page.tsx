@@ -45,7 +45,14 @@ export default function JefeTallerAsignacionPage() {
 
       if (mecanicosResponse.ok) {
         const mecanicosData = await mecanicosResponse.json();
-        setMecanicos(mecanicosData.results || mecanicosData || []);
+        const mecanicos = mecanicosData.results || mecanicosData || [];
+        console.log("Mecánicos cargados:", mecanicos.length, mecanicos);
+        setMecanicos(mecanicos);
+      } else {
+        console.error("Error al cargar mecánicos:", mecanicosResponse.status, mecanicosResponse.statusText);
+        const errorText = await mecanicosResponse.text().catch(() => "Error desconocido");
+        console.error("Error detallado:", errorText);
+        toast.error(`Error al cargar mecánicos: ${mecanicosResponse.status}`);
       }
 
       // Cargar OTs pendientes de asignación
@@ -68,42 +75,103 @@ export default function JefeTallerAsignacionPage() {
 
   const cargarCargaTrabajo = async (mecanicoId: string) => {
     try {
-      const response = await fetch(`${ENDPOINTS.WORK_ORDERS}?mecanico=${mecanicoId}&estado__in=EN_EJECUCION,EN_PAUSA`, {
+      // Cargar todas las OTs asignadas al mecánico (no solo las activas)
+      const response = await fetch(`${ENDPOINTS.WORK_ORDERS}?mecanico=${mecanicoId}`, {
         method: "GET",
         ...withSession(),
       });
 
       if (response.ok) {
         const data = await response.json();
-        return (data.results || data || []).length;
+        const ots = data.results || data || [];
+        // Separar por estado
+        const activas = ots.filter((ot: any) => 
+          ["EN_EJECUCION", "EN_PAUSA", "EN_DIAGNOSTICO", "ABIERTA"].includes(ot.estado)
+        );
+        const todas = ots.length;
+        return { activas: activas.length, total: todas, ots: activas };
       }
-      return 0;
+      return { activas: 0, total: 0, ots: [] };
     } catch {
-      return 0;
+      return { activas: 0, total: 0, ots: [] };
     }
   };
 
   const handleAsignar = async (otId: string, mecanicoId: string) => {
     try {
-      const response = await fetch(`/api/proxy/work/ordenes/${otId}/`, {
-        method: "PATCH",
+      // Primero verificar el estado de la OT
+      const otResponse = await fetch(ENDPOINTS.WORK_ORDER(otId), {
+        method: "GET",
         ...withSession(),
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          mecanico: mecanicoId,
-        }),
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        toast.error(error.detail || "Error al asignar mecánico");
+      if (!otResponse.ok) {
+        toast.error("Error al obtener información de la OT");
         return;
       }
 
-      toast.success("Mecánico asignado correctamente");
-      await cargarDatos();
+      const ot = await otResponse.json();
+
+      // Si la OT está en EN_DIAGNOSTICO o ABIERTA, usar el endpoint de aprobar-asignacion
+      if (ot.estado === "EN_DIAGNOSTICO" || ot.estado === "ABIERTA") {
+        const baseUrl = ENDPOINTS.WORK_ORDER(otId).replace(/\/$/, '');
+        const response = await fetch(`${baseUrl}/aprobar-asignacion/`, {
+          method: "POST",
+          ...withSession(),
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            mecanico_id: mecanicoId,
+          }),
+        });
+
+        const text = await response.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { detail: text || "Error desconocido" };
+        }
+
+        if (!response.ok) {
+          toast.error(data.detail || "Error al asignar mecánico");
+          console.error("Error al asignar:", data);
+          return;
+        }
+
+        toast.success("Mecánico asignado correctamente");
+        await cargarDatos();
+      } else {
+        // Para otros estados, usar PATCH directo
+        const response = await fetch(ENDPOINTS.WORK_ORDER(otId), {
+          method: "PATCH",
+          ...withSession(),
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            mecanico: mecanicoId,
+          }),
+        });
+
+        const text = await response.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { detail: text || "Error desconocido" };
+        }
+
+        if (!response.ok) {
+          toast.error(data.detail || data.message || "Error al asignar mecánico");
+          console.error("Error al asignar:", data);
+          return;
+        }
+
+        toast.success("Mecánico asignado correctamente");
+        await cargarDatos();
+      }
     } catch (error) {
       console.error("Error al asignar:", error);
       toast.error("Error al asignar mecánico");
@@ -178,7 +246,12 @@ export default function JefeTallerAsignacionPage() {
             </h2>
           </div>
           <div className="divide-y divide-gray-200 dark:divide-gray-700">
-            {mecanicos.length > 0 ? (
+            {loading ? (
+              <div className="p-6 text-center">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
+                <p className="mt-4 text-gray-500 dark:text-gray-400">Cargando mecánicos...</p>
+              </div>
+            ) : mecanicos.length > 0 ? (
               mecanicos.map((mecanico) => (
                 <MecanicoCard
                   key={mecanico.id}
@@ -189,7 +262,11 @@ export default function JefeTallerAsignacionPage() {
               ))
             ) : (
               <div className="p-6 text-center text-gray-500 dark:text-gray-400">
-                No hay mecánicos registrados.
+                <p className="text-lg font-medium mb-2">No hay mecánicos registrados.</p>
+                <p className="text-sm">Asegúrate de que existan usuarios con rol MECANICO en el sistema.</p>
+                <p className="text-xs mt-2 text-gray-400 dark:text-gray-500">
+                  Total cargados: {mecanicos.length}
+                </p>
               </div>
             )}
           </div>
@@ -208,9 +285,10 @@ function MecanicoCard({
   otsPendientes: any[];
   onAsignar: (otId: string, mecanicoId: string) => void;
 }) {
-  const [cargaTrabajo, setCargaTrabajo] = useState(0);
+  const [cargaTrabajo, setCargaTrabajo] = useState({ activas: 0, total: 0, ots: [] });
   const [loadingCarga, setLoadingCarga] = useState(true);
   const [otSeleccionada, setOtSeleccionada] = useState<string>("");
+  const [mostrarOTs, setMostrarOTs] = useState(false);
 
   useEffect(() => {
     cargarCarga();
@@ -219,14 +297,20 @@ function MecanicoCard({
   const cargarCarga = async () => {
     setLoadingCarga(true);
     try {
-      const response = await fetch(`${ENDPOINTS.WORK_ORDERS}?mecanico=${mecanico.id}&estado__in=EN_EJECUCION,EN_PAUSA`, {
+      // Cargar todas las OTs asignadas al mecánico
+      const response = await fetch(`${ENDPOINTS.WORK_ORDERS}?mecanico=${mecanico.id}`, {
         method: "GET",
         ...withSession(),
       });
 
       if (response.ok) {
         const data = await response.json();
-        setCargaTrabajo((data.results || data || []).length);
+        const ots = data.results || data || [];
+        // Separar por estado
+        const activas = ots.filter((ot: any) => 
+          ["EN_EJECUCION", "EN_PAUSA", "EN_DIAGNOSTICO", "ABIERTA"].includes(ot.estado)
+        );
+        setCargaTrabajo({ activas: activas.length, total: ots.length, ots: activas });
       }
     } catch (error) {
       console.error("Error al cargar carga:", error);
@@ -247,15 +331,60 @@ function MecanicoCard({
         <div className="flex-1">
           <div className="flex items-center gap-4 mb-2">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              {mecanico.get_full_name || mecanico.username}
+              {mecanico.get_full_name || `${mecanico.first_name || ""} ${mecanico.last_name || ""}`.trim() || mecanico.username}
             </h3>
-            <span className={`px-2 py-1 text-xs font-medium rounded ${getCargaColor(cargaTrabajo)}`}>
-              {loadingCarga ? "Cargando..." : `${cargaTrabajo} OTs activas`}
+            <span className={`px-2 py-1 text-xs font-medium rounded ${getCargaColor(cargaTrabajo.activas)}`}>
+              {loadingCarga ? "Cargando..." : `${cargaTrabajo.activas} OTs activas`}
             </span>
+            {cargaTrabajo.total > 0 && (
+              <span className="px-2 py-1 text-xs font-medium rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                {cargaTrabajo.total} OTs totales
+              </span>
+            )}
           </div>
-          <div className="text-sm text-gray-600 dark:text-gray-400">
-            <span>Email: {mecanico.email || "N/A"}</span>
+          <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+            <div>
+              <span>Email: {mecanico.email || "N/A"}</span>
+            </div>
+            {cargaTrabajo.activas > 0 && (
+              <div>
+                <button
+                  onClick={() => setMostrarOTs(!mostrarOTs)}
+                  className="text-blue-600 dark:text-blue-400 hover:underline text-xs"
+                >
+                  {mostrarOTs ? "Ocultar" : "Ver"} OTs asignadas ({cargaTrabajo.activas})
+                </button>
+              </div>
+            )}
           </div>
+          {mostrarOTs && cargaTrabajo.ots.length > 0 && (
+            <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+              <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+                OTs Asignadas:
+              </h4>
+              <div className="space-y-1">
+                {cargaTrabajo.ots.map((ot: any) => (
+                  <div
+                    key={ot.id}
+                    className="text-xs text-gray-700 dark:text-gray-300 flex items-center justify-between"
+                  >
+                    <span>
+                      OT #{ot.id.slice(0, 8)} - {ot.vehiculo_patente || ot.vehiculo?.patente} 
+                      <span className="ml-2 px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">
+                        {ot.estado}
+                      </span>
+                    </span>
+                    <Link
+                      href={`/workorders/${ot.id}`}
+                      className="text-blue-600 dark:text-blue-400 hover:underline ml-2"
+                    >
+                      Ver
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         <div className="ml-4">
           {otsPendientes.length > 0 && (

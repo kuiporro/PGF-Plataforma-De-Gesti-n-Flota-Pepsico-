@@ -154,6 +154,8 @@ class IngresoVehiculoSerializer(serializers.ModelSerializer):
     """
     vehiculo_patente = serializers.CharField(source="vehiculo.patente", read_only=True)
     guardia_nombre = serializers.CharField(source="guardia.get_full_name", read_only=True)
+    # Incluir información básica del vehículo para el frontend (solo lectura)
+    vehiculo_detalle = VehiculoListSerializer(source="vehiculo", read_only=True)
     
     class Meta:
         model = IngresoVehiculo
@@ -164,16 +166,11 @@ class IngresoVehiculoSerializer(serializers.ModelSerializer):
         """
         Validaciones a nivel de objeto completo.
         """
-        from apps.core.validators import validar_rut_chileno
         from apps.workorders.models import OrdenTrabajo
         
-        # Validar campos obligatorios
+        # Validar campos obligatorios (solo los que existen en el modelo)
         campos_obligatorios = {
             'vehiculo': 'patente',
-            'nombre_conductor': 'nombre del conductor',
-            'rut_conductor': 'RUT del conductor',
-            'fecha_ingreso': 'hora de ingreso',
-            'site': 'site'
         }
         
         for campo, nombre_display in campos_obligatorios.items():
@@ -184,27 +181,21 @@ class IngresoVehiculoSerializer(serializers.ModelSerializer):
                 else:
                     raise serializers.ValidationError({campo: f"El campo {nombre_display} es obligatorio."})
         
-        # Validar RUT del conductor
-        rut_conductor = attrs.get('rut_conductor') or (getattr(self.instance, 'rut_conductor', None) if self.instance else None)
-        if rut_conductor:
-            es_valido, rut_formateado = validar_rut_chileno(rut_conductor)
-            if not es_valido:
-                raise serializers.ValidationError({'rut_conductor': rut_formateado})
-            attrs['rut_conductor'] = rut_formateado
-        
         # Validar que el vehículo no tenga OT activa (solo en creación)
-        if not self.instance:
-            vehiculo = attrs.get('vehiculo')
-            if vehiculo:
-                ots_activas = OrdenTrabajo.objects.filter(
-                    vehiculo=vehiculo,
-                    estado__in=['ABIERTA', 'EN_EJECUCION', 'QA', 'EN_DIAGNOSTICO', 'EN_PAUSA']
-                ).exists()
-                
-                if ots_activas:
-                    raise serializers.ValidationError({
-                        'vehiculo': "El vehículo ya se encuentra ingresado en el taller."
-                    })
+        # NOTA: Esta validación se comenta porque el flujo permite múltiples ingresos
+        # El sistema debe manejar múltiples OTs activas si es necesario
+        # if not self.instance:
+        #     vehiculo = attrs.get('vehiculo')
+        #     if vehiculo:
+        #         ots_activas = OrdenTrabajo.objects.filter(
+        #             vehiculo=vehiculo,
+        #             estado__in=['ABIERTA', 'EN_EJECUCION', 'QA', 'EN_DIAGNOSTICO', 'EN_PAUSA']
+        #         ).exists()
+        #         
+        #         if ots_activas:
+        #             raise serializers.ValidationError({
+        #                 'vehiculo': "El vehículo ya se encuentra ingresado en el taller."
+        #             })
         
         return attrs
 

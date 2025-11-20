@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { ENDPOINTS } from "@/lib/constants";
 import { withSession } from "@/lib/api.client";
 import Link from "next/link";
 import { useToast } from "@/components/ToastContainer";
 import { useAuth } from "@/store/auth";
+import { handleApiError, getRoleHomePage } from "@/lib/permissions";
 
 /**
  * Página de evidencias de una Orden de Trabajo.
@@ -19,13 +21,15 @@ import { useAuth } from "@/store/auth";
  * - Vista previa de imágenes
  * - Descarga de archivos
  */
-export default function EvidencesPage({ params }: any) {
-  const otId = params.id;
+export default function EvidencesPage() {
+  const params = useParams();
+  const router = useRouter();
+  const otId = params.id as string;
   const toast = useToast();
-  const { hasRole } = useAuth();
+  const { hasRole, user } = useAuth();
 
-  // Solo MECANICO y JEFE_TALLER pueden subir evidencias
-  const canUpload = hasRole(["MECANICO", "JEFE_TALLER", "ADMIN"]);
+  // Roles autorizados para subir evidencias
+  const canUpload = hasRole(["MECANICO", "SUPERVISOR", "ADMIN", "GUARDIA", "JEFE_TALLER"]);
 
   const [rows, setRows] = useState<any[]>([]);
   const [selected, setSelected] = useState<any>(null);
@@ -62,7 +66,15 @@ export default function EvidencesPage({ params }: any) {
 
       const r = await fetch(url, withSession());
       if (!r.ok) {
-        toast.error("Error al cargar evidencias");
+        if (r.status === 403) {
+          toast.error("Permisos insuficientes. No tiene acceso a ver evidencias.");
+          setTimeout(() => {
+            router.push(getRoleHomePage(user?.rol));
+          }, 2000);
+          return;
+        }
+        const errorData = await r.json().catch(() => ({ detail: "Error al cargar evidencias" }));
+        handleApiError({ status: r.status, detail: errorData.detail }, router, toast, user?.rol);
         return;
       }
       

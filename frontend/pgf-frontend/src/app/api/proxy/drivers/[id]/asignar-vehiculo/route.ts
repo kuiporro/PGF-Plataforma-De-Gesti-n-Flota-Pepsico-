@@ -6,7 +6,7 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   const body = await request.json();
-  return proxyFetch(`/drivers/choferes/${params.id}/asignar_vehiculo/`, {
+  return proxyFetch(`/drivers/choferes/${params.id}/asignar-vehiculo/`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

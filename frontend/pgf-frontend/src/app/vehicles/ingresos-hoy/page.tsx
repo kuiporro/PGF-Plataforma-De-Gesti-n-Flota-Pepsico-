@@ -89,6 +89,12 @@ export default function IngresosHoyPage() {
           </h1>
           <div className="flex gap-2">
             <Link
+              href="/vehicles/ingresos-historial"
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors font-medium"
+            >
+              📜 Ver Historial Completo
+            </Link>
+            <Link
               href="/vehicles/ingreso"
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
             >
@@ -231,14 +237,14 @@ export default function IngresosHoyPage() {
                             Registrar Salida
                           </Link>
                         )}
-                        {ingreso.vehiculo && (
+                        {ingreso.vehiculo && ingreso.vehiculo.id && ingreso.vehiculo.id !== "undefined" ? (
                           <Link
                             href={`/vehicles/${ingreso.vehiculo.id}`}
                             className="ml-4 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-300"
                           >
                             Ver Vehículo
                           </Link>
-                        )}
+                        ) : null}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <button

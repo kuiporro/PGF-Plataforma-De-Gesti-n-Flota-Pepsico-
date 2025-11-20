@@ -10,7 +10,7 @@ export default defineConfig({
     setupFiles: ['./src/__tests__/setup.ts'],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'json', 'html'],
+      reporter: ['text', 'json', 'html', 'json-summary'],
       reportsDirectory: '../../test-results/frontend-coverage',
       exclude: [
         'node_modules/',
@@ -21,8 +21,18 @@ export default defineConfig({
         '**/*.test.{ts,tsx}',
         '**/*.spec.{ts,tsx}',
       ],
+      thresholds: {
+        lines: 100,
+        functions: 100,
+        branches: 100,
+        statements: 100,
+      },
     },
-    reporters: ['verbose'],
+    reporters: ['verbose', 'json', 'html'],
+    outputFile: {
+      json: '../../test-results/junit/frontend-junit.json',
+      html: '../../test-results/frontend-report.html',
+    },
   },
   resolve: {
     alias: {

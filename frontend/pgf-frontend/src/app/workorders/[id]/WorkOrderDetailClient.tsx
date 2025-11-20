@@ -23,7 +23,8 @@ export default function WorkOrderDetailClient({ ot, id }: WorkOrderDetailClientP
   const canChangeState = isMecanico || isJefeTaller;
   const canClose = isJefeTaller;
   const canAssign = isJefeTaller;
-  const canUploadEvidence = isMecanico || isJefeTaller;
+  // Roles autorizados para subir evidencias
+  const canUploadEvidence = hasRole(["MECANICO", "SUPERVISOR", "ADMIN", "GUARDIA", "JEFE_TALLER"]);
 
   // Acciones de cambio de estado
   const handleStateChange = async (action: string) => {

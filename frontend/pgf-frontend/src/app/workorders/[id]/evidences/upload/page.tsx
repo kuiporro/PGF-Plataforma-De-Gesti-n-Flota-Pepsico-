@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, use } from "react";
 import { ENDPOINTS } from "@/lib/constants";
 import { withSession } from "@/lib/api.client";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ToastContainer";
 import { useAuth } from "@/store/auth";
 import RoleGuard from "@/components/RoleGuard";
+import { handleApiError, getRoleHomePage } from "@/lib/permissions";
 
 /**
  * Componente para subir evidencias a una Orden de Trabajo.
@@ -25,14 +26,14 @@ import RoleGuard from "@/components/RoleGuard";
  * 2. Sube archivo directamente a S3
  * 3. Registra la evidencia en el backend
  */
-export default function UploadEvidence({ params }: any) {
-  const otId = params.id;
+export default function UploadEvidence({ params }: { params: Promise<{ id: string }> }) {
+  const { id: otId } = use(params);
   const router = useRouter();
   const toast = useToast();
-  const { hasRole } = useAuth();
+  const { hasRole, user } = useAuth();
 
-  // Solo MECANICO y JEFE_TALLER pueden subir evidencias
-  const canUpload = hasRole(["MECANICO", "JEFE_TALLER", "ADMIN"]);
+  // Roles autorizados para subir evidencias
+  const canUpload = hasRole(["MECANICO", "SUPERVISOR", "ADMIN", "GUARDIA", "JEFE_TALLER"]);
 
   const [file, setFile] = useState<File | null>(null);
   const [descripcion, setDescripcion] = useState("");
@@ -151,11 +152,35 @@ export default function UploadEvidence({ params }: any) {
       });
 
       if (!r.ok) {
+        if (r.status === 403) {
+          toast.error("Permisos insuficientes. No tiene acceso para subir evidencias.");
+          setTimeout(() => {
+            router.push(getRoleHomePage(user?.rol));
+          }, 2000);
+          return;
+        }
         const errorData = await r.json().catch(() => ({ detail: "Error al obtener URL de subida" }));
-        throw new Error(errorData.detail || "Error al obtener URL de subida");
+        handleApiError({ status: r.status, detail: errorData.detail }, router, toast, user?.rol);
+        return;
       }
 
       const data = await r.json();
+
+      // Validar que tenemos los datos necesarios
+      if (!data.upload || !data.upload.url) {
+        throw new Error("No se recibió URL de subida del servidor");
+      }
+
+      if (!data.file_url) {
+        throw new Error("No se recibió URL del archivo del servidor");
+      }
+
+      // Validar que file_url es una URL válida
+      try {
+        new URL(data.file_url);
+      } catch {
+        throw new Error(`URL del archivo inválida: ${data.file_url}`);
+      }
 
       // 2) Subir archivo directamente a S3 con barra de progreso
       const formData = new FormData();
@@ -206,7 +231,53 @@ export default function UploadEvidence({ params }: any) {
 
       if (!saveRes.ok) {
         const errorData = await saveRes.json().catch(() => ({ detail: "Error al guardar evidencia" }));
-        throw new Error(errorData.detail || "Error al guardar evidencia");
+        
+        // Manejar errores de validación del backend
+        let errorMessage = "Error al guardar evidencia";
+        if (errorData.detail) {
+          errorMessage = errorData.detail;
+        } else if (errorData.url && Array.isArray(errorData.url)) {
+          // Error de validación de URL
+          errorMessage = `Error de URL: ${errorData.url.join(", ")}`;
+        } else if (errorData.errors) {
+          // Errores de validación generales
+          const errorList = Object.entries(errorData.errors)
+            .map(([field, messages]: [string, any]) => 
+              `${field}: ${Array.isArray(messages) ? messages.join(", ") : messages}`
+            )
+            .join("; ");
+          errorMessage = `Errores de validación: ${errorList}`;
+        } else if (typeof errorData === 'object') {
+          // Intentar extraer cualquier mensaje de error
+          const errorKeys = Object.keys(errorData);
+          if (errorKeys.length > 0) {
+            const firstError = errorData[errorKeys[0]];
+            if (Array.isArray(firstError)) {
+              errorMessage = firstError.join(", ");
+            } else {
+              errorMessage = String(firstError);
+            }
+          }
+        }
+        
+        console.error("Error al guardar evidencia:", {
+          status: saveRes.status,
+          statusText: saveRes.statusText,
+          errorData: errorData,
+          file_url: data.file_url,
+        });
+        
+        if (saveRes.status === 403) {
+          toast.error("Permisos insuficientes. No tiene acceso para guardar evidencias.");
+          setTimeout(() => {
+            router.push(getRoleHomePage(user?.rol));
+          }, 2000);
+        } else {
+          handleApiError({ status: saveRes.status, detail: errorMessage }, router, toast, user?.rol);
+        }
+        setUploading(false);
+        setUploadProgress(0);
+        return;
       }
 
       toast.success("Evidencia subida correctamente");

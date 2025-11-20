@@ -36,13 +36,13 @@ class VehiclePermission(BasePermission):
                 "COORDINADOR_ZONA", "SPONSOR", "CHOFER", "EJECUTIVO"
             }
 
-        # Crear vehículo: COORDINADOR_ZONA y ADMIN
+        # Crear vehículo: JEFE_TALLER, COORDINADOR_ZONA y ADMIN
         if request.method == "POST" and action == "create":
-            return rol in {"COORDINADOR_ZONA", "ADMIN"}
+            return rol in {"JEFE_TALLER", "COORDINADOR_ZONA", "ADMIN"}
 
-        # Actualizar vehículo: COORDINADOR_ZONA y ADMIN
+        # Actualizar vehículo: JEFE_TALLER (limitado), COORDINADOR_ZONA y ADMIN
         if request.method in ("PUT", "PATCH") and action in ("update", "partial_update"):
-            return rol in {"COORDINADOR_ZONA", "ADMIN"}
+            return rol in {"JEFE_TALLER", "COORDINADOR_ZONA", "ADMIN"}
 
         # Eliminar vehículo: solo ADMIN
         if request.method == "DELETE":
@@ -60,11 +60,23 @@ class VehiclePermission(BasePermission):
         """
         Valida permisos a nivel de objeto.
         CHOFER solo puede ver su vehículo asignado.
+        JEFE_TALLER puede editar campos limitados (no VIN, CeCo, Site original).
         """
         if not request.user or not request.user.is_authenticated:
             return False
 
         rol = getattr(request.user, "rol", None)
+
+        # JEFE_TALLER: puede editar campos limitados, no puede eliminar
+        if rol == "JEFE_TALLER":
+            if request.method == "DELETE":
+                return False  # No puede eliminar vehículos
+            if request.method in ("PUT", "PATCH"):
+                # Permitir edición, pero se validará en el serializer qué campos puede modificar
+                return True
+            if request.method in SAFE_METHODS:
+                return True
+            return False
 
         # CHOFER solo puede ver su vehículo asignado
         if rol == "CHOFER":

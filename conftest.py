@@ -8,8 +8,8 @@ en todos los tests del proyecto.
 
 import pytest
 from django.contrib.auth import get_user_model
-from apps.vehicles.models import Vehiculo
-from apps.workorders.models import OrdenTrabajo
+from apps.vehicles.models import Vehiculo, IngresoVehiculo
+from apps.workorders.models import OrdenTrabajo, Evidencia
 from datetime import datetime, timedelta
 import uuid
 
@@ -69,6 +69,19 @@ def mecanico_user(db):
 
 
 @pytest.fixture
+def guardia_user(db):
+    """Crea un usuario guardia para pruebas."""
+    return User.objects.create_user(
+        username="guardia_test",
+        email="guardia@test.com",
+        password="testpass123",
+        rol=User.Rol.GUARDIA,
+        is_active=True,
+        rut="33333333-3"
+    )
+
+
+@pytest.fixture
 def vehiculo(db, supervisor_user):
     """Crea un vehículo de prueba."""
     return Vehiculo.objects.create(
@@ -110,4 +123,26 @@ def authenticated_client(api_client, admin_user):
     """Cliente API autenticado como admin."""
     api_client.force_authenticate(user=admin_user)
     return api_client
+
+
+@pytest.fixture
+def ingreso_vehiculo(db, vehiculo, guardia_user):
+    """Crea un ingreso de vehículo de prueba."""
+    return IngresoVehiculo.objects.create(
+        vehiculo=vehiculo,
+        guardia=guardia_user,
+        observaciones="Ingreso de prueba",
+        kilometraje=45000
+    )
+
+
+@pytest.fixture
+def evidencia(db, orden_trabajo):
+    """Crea una evidencia de prueba."""
+    return Evidencia.objects.create(
+        ot=orden_trabajo,
+        url="https://s3.example.com/test.jpg",
+        tipo=Evidencia.TipoEvidencia.FOTO,
+        descripcion="Evidencia de prueba"
+    )
 

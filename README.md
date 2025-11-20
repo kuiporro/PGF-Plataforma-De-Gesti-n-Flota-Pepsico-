@@ -12,6 +12,7 @@ Sistema completo de gestión de flota vehicular desarrollado para PepsiCo, con g
 - [Variables de Entorno](#-variables-de-entorno)
 - [Documentación API](#-documentación-api)
 - [Testing](#-testing)
+- [Limpieza de Datos](#-limpieza-de-datos)
 - [Contribuir](#-contribuir)
 
 ## ✨ Características
@@ -336,7 +337,52 @@ La documentación interactiva está disponible en:
 - `/api/v1/emergencies/` - Emergencias
 - `/api/v1/reports/` - Reportes y dashboards
 
+## 🗑️ Limpieza de Datos
+
+El proyecto incluye un comando para limpiar todos los datos de la aplicación, útil para desarrollo, testing o preparar demostraciones.
+
+**Documentación completa**: Ver [docs/LIMPIEZA_DATOS.md](docs/LIMPIEZA_DATOS.md)
+
+### Uso Rápido
+
+```bash
+# Limpieza completa (con confirmación)
+docker compose exec api poetry run python manage.py clear_all_data
+
+# Limpieza completa (sin confirmación)
+docker compose exec api poetry run python manage.py clear_all_data --confirm
+
+# Mantener todos los usuarios
+docker compose exec api poetry run python manage.py clear_all_data --keep-users --confirm
+
+# Mantener un usuario específico
+docker compose exec api poetry run python manage.py clear_all_data \
+  --keep-current-user \
+  --username admin \
+  --confirm
+```
+
+**⚠️ Advertencia**: Este comando es destructivo y elimina permanentemente todos los datos. Úsalo con precaución.
+
 ## 🧪 Testing
+
+Para información detallada sobre cómo ejecutar las pruebas, ver [docs/GUIA_PRUEBAS.md](docs/GUIA_PRUEBAS.md)
+
+### Ejecución Rápida
+
+```bash
+# Pruebas backend
+docker compose exec api poetry run pytest apps/ -v
+
+# Pruebas frontend
+docker compose exec web sh -c "cd /app && npm run test"
+
+# Script consolidado (con cobertura)
+./scripts/run_all_tests.sh --coverage
+
+# Escaneo de seguridad
+./scripts/owasp_zap_scan.sh baseline
+```
 
 ### Cobertura Actual
 

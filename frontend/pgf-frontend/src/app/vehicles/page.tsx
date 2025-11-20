@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useToast } from "@/components/ToastContainer";
 import { useAuth } from "@/store/auth";
 import Pagination from "@/components/Pagination";
+import { handleApiError, getRoleHomePage } from "@/lib/permissions";
 
 export default function VehiclesPage() {
   const [rows, setRows] = useState<any[]>([]);
@@ -13,8 +15,9 @@ export default function VehiclesPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const itemsPerPage = 20;
+  const router = useRouter();
   const toast = useToast();
-  const { hasRole } = useAuth();
+  const { hasRole, user } = useAuth();
 
   async function load(page: number = 1) {
     try {
@@ -28,7 +31,16 @@ export default function VehiclesPage() {
           setRows([]);
           return;
         }
-        throw new Error(`HTTP ${r.status}`);
+        if (r.status === 403) {
+          toast.error("Permisos insuficientes. No tiene acceso a ver vehículos.");
+          setTimeout(() => {
+            router.push(getRoleHomePage(user?.rol));
+          }, 2000);
+          return;
+        }
+        const errorData = await r.json().catch(() => ({ detail: "Error al cargar vehículos" }));
+        handleApiError({ status: r.status, detail: errorData.detail }, router, toast, user?.rol);
+        return;
       }
       
       const text = await r.text();
@@ -54,7 +66,13 @@ export default function VehiclesPage() {
     load(currentPage);
   }, [currentPage]);
 
-  const canEdit = hasRole(["ADMIN", "SUPERVISOR", "COORDINADOR_ZONA"]);
+  // Permisos según especificación:
+  // ADMIN: puede agregar/editar/eliminar
+  // JEFE_TALLER: puede agregar/editar limitado (no eliminar)
+  // COORDINADOR_ZONA: puede agregar/editar
+  const canCreate = hasRole(["ADMIN", "JEFE_TALLER", "COORDINADOR_ZONA"]);
+  const canEdit = hasRole(["ADMIN", "JEFE_TALLER", "COORDINADOR_ZONA"]);
+  const canDelete = hasRole(["ADMIN"]); // Solo ADMIN puede eliminar
   const isGuardia = hasRole(["GUARDIA"]);
 
   return (
@@ -70,7 +88,7 @@ export default function VehiclesPage() {
               📥 Registrar Ingreso
             </Link>
           )}
-          {canEdit && (
+          {canCreate && (
             <Link 
               href="/vehicles/create" 
               className="px-4 py-2 text-white rounded-lg transition-colors font-medium shadow-sm hover:shadow"
@@ -136,20 +154,20 @@ export default function VehiclesPage() {
                         Ver
                       </Link>
                       {canEdit && (
-                        <>
-                          <Link 
-                            href={`/vehicles/${v.id}/edit`} 
-                            className="px-3 py-1 text-sm text-green-600 dark:text-green-400 hover:underline"
-                          >
-                            Editar
-                          </Link>
-                          <Link 
-                            href={`/vehicles/${v.id}/delete`} 
-                            className="px-3 py-1 text-sm text-red-600 dark:text-red-400 hover:underline"
-                          >
-                            Eliminar
-                          </Link>
-                        </>
+                        <Link 
+                          href={`/vehicles/${v.id}/edit`} 
+                          className="px-3 py-1 text-sm text-green-600 dark:text-green-400 hover:underline"
+                        >
+                          Editar
+                        </Link>
+                      )}
+                      {canDelete && (
+                        <Link 
+                          href={`/vehicles/${v.id}/delete`} 
+                          className="px-3 py-1 text-sm text-red-600 dark:text-red-400 hover:underline"
+                        >
+                          Eliminar
+                        </Link>
                       )}
                     </div>
                   </td>

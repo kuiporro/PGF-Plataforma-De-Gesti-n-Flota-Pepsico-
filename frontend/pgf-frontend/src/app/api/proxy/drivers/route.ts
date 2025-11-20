@@ -1,14 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { proxyFetch } from "../utils";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
-  let endpoint = "/drivers/choferes/";
-  if (searchParams.toString()) {
-    endpoint += `?${searchParams.toString()}`;
-  }
+  const queryString = searchParams.toString();
+  const url = queryString ? `/drivers/choferes/?${queryString}` : "/drivers/choferes/";
   
-  return proxyFetch(endpoint, {
+  return proxyFetch(url, {
     method: "GET",
   });
 }

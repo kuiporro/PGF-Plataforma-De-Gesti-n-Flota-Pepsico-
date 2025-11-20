@@ -32,7 +32,9 @@ Endpoints principales:
 import os  # Para variables de entorno
 import uuid  # Para generar IDs únicos
 import mimetypes  # Para detectar tipos MIME de archivos
+import re  # Para expresiones regulares
 from decimal import Decimal  # Para cálculos precisos de dinero
+from urllib.parse import urlparse, urlunparse  # Para manipular URLs
 
 import boto3  # Cliente AWS S3
 from botocore.config import Config  # Configuración de boto3
@@ -598,18 +600,18 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
         - 400: Si falta mecanico_id o estado inválido
         - 404: Si el mecánico no existe
         """
-        # Solo JEFE_TALLER puede asignar mecánicos
-        if request.user.rol != "JEFE_TALLER":
+        # JEFE_TALLER y ADMIN pueden asignar mecánicos
+        if request.user.rol not in ["JEFE_TALLER", "ADMIN"]:
             return Response(
-                {"detail": "Solo JEFE_TALLER puede asignar mecánicos."},
+                {"detail": "Solo JEFE_TALLER o ADMIN pueden asignar mecánicos."},
                 status=status.HTTP_403_FORBIDDEN
             )
         ot = self.get_object()
         
-        # Validar estado
-        if ot.estado != "EN_DIAGNOSTICO":
+        # Validar estado - permitir asignar desde ABIERTA o EN_DIAGNOSTICO
+        if ot.estado not in ["ABIERTA", "EN_DIAGNOSTICO"]:
             return Response(
-                {"detail": "La OT debe estar en EN_DIAGNOSTICO para aprobar asignación."},
+                {"detail": f"La OT debe estar en ABIERTA o EN_DIAGNOSTICO para asignar mecánico. Estado actual: {ot.estado}"},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -631,10 +633,17 @@ class OrdenTrabajoViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
         
-        # Asignar mecánico y supervisor
+        # Asignar mecánico
         ot.mecanico = mecanico
-        ot.supervisor = request.user
-        ot.fecha_aprobacion_supervisor = timezone.now()
+        
+        # Si no tiene supervisor, asignar el usuario actual si es supervisor
+        if not ot.supervisor and request.user.rol in ["SUPERVISOR", "COORDINADOR_ZONA", "ADMIN"]:
+            ot.supervisor = request.user
+            ot.fecha_aprobacion_supervisor = timezone.now()
+        elif ot.supervisor:
+            # Si ya tiene supervisor, actualizar fecha de aprobación
+            ot.fecha_aprobacion_supervisor = timezone.now()
+        
         ot.fecha_asignacion_mecanico = timezone.now()
         
         # Ajustar prioridad si se proporciona
@@ -1413,7 +1422,7 @@ class EvidenciaViewSet(viewsets.ModelViewSet):
     2. Frontend sube archivo directamente a S3 usando URL presigned
     3. Frontend llama a POST /evidencias/ con la URL del archivo
     """
-    queryset = Evidencia.objects.select_related("ot")
+    queryset = Evidencia.objects.select_related("ot", "ot__vehiculo", "subido_por")
     serializer_class = EvidenciaSerializer
     permission_classes = [WorkOrderPermission]
 
@@ -1421,32 +1430,87 @@ class EvidenciaViewSet(viewsets.ModelViewSet):
     filterset_fields = ["tipo", "ot"]
     ordering_fields = ["subido_en"]
     
+    def get_queryset(self):
+        """
+        Filtra el queryset según el rol del usuario.
+        
+        - JEFE_TALLER: todas las evidencias de su Site
+        - SUPERVISOR: solo evidencias de su Site
+        - ADMIN: todas las evidencias
+        - MECANICO: evidencias que él subió o de la OT en la que trabaja
+        - GUARDIA: evidencias que él subió
+        """
+        queryset = super().get_queryset()
+        user = self.request.user
+        
+        if not user or not user.is_authenticated:
+            return queryset.none()
+        
+        rol = getattr(user, "rol", None)
+        
+        # Jefe de Taller: todas las evidencias de su Site
+        if rol == "JEFE_TALLER":
+            user_site = getattr(user, 'profile', None)
+            if user_site and hasattr(user_site, 'site') and user_site.site:
+                return queryset.filter(ot__vehiculo__site=user_site.site)
+            # Si no tiene site configurado, mostrar todas (fallback)
+            return queryset
+        
+        # Supervisor Zonal: solo evidencias de su Site
+        if rol == "SUPERVISOR":
+            user_site = getattr(user, 'profile', None)
+            if user_site and hasattr(user_site, 'site') and user_site.site:
+                return queryset.filter(ot__vehiculo__site=user_site.site)
+            return queryset.none()
+        
+        # Administrador: todas las evidencias
+        if rol == "ADMIN":
+            return queryset
+        
+        # Mecánico: evidencias que él subió o de la OT en la que trabaja
+        if rol == "MECANICO":
+            # Evidencias que él subió
+            queryset_user = queryset.filter(subido_por=user)
+            # Evidencias de OTs asignadas a él
+            queryset_ot = queryset.filter(ot__mecanico=user)
+            # Combinar ambos querysets
+            return queryset_user.union(queryset_ot)
+        
+        # Guardia: solo evidencias que él subió
+        if rol == "GUARDIA":
+            return queryset.filter(subido_por=user)
+        
+        # Otros roles: sin acceso
+        return queryset.none()
+    
     def create(self, request, *args, **kwargs):
         """
         Crea una nueva evidencia y envía notificaciones a usuarios relevantes.
         
         Sobrescribe el método create del ModelViewSet para agregar
         lógica de notificaciones cuando se sube una evidencia importante.
+        También asigna automáticamente el usuario que sube la evidencia.
         """
-        # Crear la evidencia usando el método del padre
-        response = super().create(request, *args, **kwargs)
+        # Asignar automáticamente el usuario que sube la evidencia
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         
-        # Si la creación fue exitosa, crear notificaciones
-        if response.status_code == status.HTTP_201_CREATED:
-            evidencia = Evidencia.objects.get(id=response.data['id'])
-            
-            # Crear notificaciones para usuarios relevantes
-            try:
-                from apps.notifications.utils import crear_notificacion_evidencia
-                crear_notificacion_evidencia(evidencia, request.user)
-            except Exception as e:
-                # Si falla la creación de notificaciones, no fallar la creación de evidencia
-                # Solo registrar el error
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.error(f"Error al crear notificaciones para evidencia {evidencia.id}: {e}")
+        # Asignar subido_por antes de guardar
+        evidencia = serializer.save(subido_por=request.user)
         
-        return response
+        # Crear notificaciones para usuarios relevantes
+        try:
+            from apps.notifications.utils import crear_notificacion_evidencia
+            crear_notificacion_evidencia(evidencia, request.user)
+        except Exception as e:
+            # Si falla la creación de notificaciones, no fallar la creación de evidencia
+            # Solo registrar el error
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error al crear notificaciones para evidencia {evidencia.id}: {e}")
+        
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     @extend_schema(request=EmptySerializer, responses={200: None})
     @action(detail=False, methods=['post'], url_path='presigned')
@@ -1489,7 +1553,7 @@ class EvidenciaViewSet(viewsets.ModelViewSet):
         3. Frontend crea registro de Evidencia con la URL del archivo
         """
         # Verificar permisos
-        if request.user.rol not in ("MECANICO", "SUPERVISOR", "ADMIN", "GUARDIA"):
+        if request.user.rol not in ("MECANICO", "SUPERVISOR", "ADMIN", "GUARDIA", "JEFE_TALLER"):
             return Response(
                 {"detail": "No autorizado para subir evidencias."}, 
                 status=status.HTTP_403_FORBIDDEN
@@ -1538,14 +1602,20 @@ class EvidenciaViewSet(viewsets.ModelViewSet):
             key = f"evidencias/generales/{uuid.uuid4()}-{filename}"
 
         # Determinar si usar LocalStack (desarrollo) o AWS real (producción)
-        use_local = os.getenv("USE_LOCALSTACK_S3", "0") == "1"
-        endpoint_url = os.getenv("AWS_ENDPOINT_URL") if use_local else None
+        # Detectar automáticamente si estamos usando LocalStack
+        endpoint_url_internal = os.getenv("AWS_ENDPOINT_URL") or os.getenv("AWS_S3_ENDPOINT_URL")
+        use_local = endpoint_url_internal is not None and ("localstack" in endpoint_url_internal.lower() or "localhost:4566" in endpoint_url_internal.lower())
+        
+        # Para LocalStack, necesitamos dos URLs:
+        # - endpoint_url_internal: Para que el backend se comunique con LocalStack (puede ser localstack:4566)
+        # - endpoint_url_public: Para que el navegador se comunique con LocalStack (debe ser localhost:4566)
+        endpoint_url_public = os.getenv("AWS_PUBLIC_URL_PREFIX", "http://localhost:4566") if use_local else None
 
-        # Crear cliente S3
+        # Crear cliente S3 con endpoint interno (para comunicación backend -> LocalStack)
         s3 = boto3.client(
             "s3",
             region_name=region,
-            endpoint_url=endpoint_url,  # LocalStack en desarrollo
+            endpoint_url=endpoint_url_internal,  # LocalStack interno en desarrollo
             config=Config(
                 s3={
                     "addressing_style": "path",
@@ -1571,13 +1641,73 @@ class EvidenciaViewSet(viewsets.ModelViewSet):
             ExpiresIn=60 * 60  # Expira en 1 hora (archivos grandes pueden tardar más en subir)
         )
 
+        # Si estamos usando LocalStack, reemplazar la URL interna por la pública en la respuesta
+        # para que el navegador pueda acceder
+        if use_local and endpoint_url_public and presigned.get("url"):
+            # Reemplazar la URL interna por la pública
+            original_url = presigned["url"]
+            new_url = original_url
+            
+            # Método 1: Reemplazar endpoint interno completo
+            if endpoint_url_internal and endpoint_url_internal in original_url:
+                new_url = original_url.replace(endpoint_url_internal, endpoint_url_public)
+            
+            # Método 2: Reemplazar hostname localstack por localhost
+            elif "localstack" in original_url.lower():
+                # Reemplazar cualquier variación de localstack por localhost
+                new_url = re.sub(
+                    r'http://localstack(?::\d+)?',
+                    endpoint_url_public,
+                    original_url,
+                    flags=re.IGNORECASE
+                )
+                # Si el reemplazo no funcionó, hacer reemplazo simple
+                if new_url == original_url:
+                    new_url = original_url.replace("localstack:4566", "localhost:4566")
+                    new_url = new_url.replace("localstack", "localhost")
+            
+            # Método 3: Usar urlparse para reemplazo más preciso
+            if new_url == original_url and "http://" in original_url:
+                parsed = urlparse(original_url)
+                # Si el hostname contiene localstack, reemplazarlo
+                if "localstack" in parsed.netloc.lower():
+                    new_netloc = parsed.netloc.replace("localstack", "localhost")
+                    new_parsed = parsed._replace(netloc=new_netloc)
+                    new_url = urlunparse(new_parsed)
+            
+            presigned["url"] = new_url
+            
+            # Log para debugging (solo en desarrollo)
+            if os.getenv("DEBUG", "False") == "True":
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"URL presigned reemplazada: {original_url} -> {new_url}")
+
         # Construir URL final del archivo
         if use_local:
-            # LocalStack: http://localhost:4566/bucket/key
-            file_url = f"{os.getenv('AWS_ENDPOINT_URL','http://localhost:4566')}/{bucket}/{key}"
+            # LocalStack: usar URL pública para que el navegador pueda acceder
+            if not endpoint_url_public:
+                # Fallback si no está configurado
+                endpoint_url_public = "http://localhost:4566"
+            file_url = f"{endpoint_url_public.rstrip('/')}/{bucket}/{key}"
         else:
             # AWS real: https://bucket.s3.region.amazonaws.com/key
             file_url = f"https://{bucket}.s3.{region}.amazonaws.com/{key}"
+
+        # Validar que file_url es una URL válida
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(file_url)
+            if not parsed.scheme or not parsed.netloc:
+                raise ValueError("URL inválida generada")
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error al generar file_url: {e}, file_url={file_url}, use_local={use_local}, endpoint_url_public={endpoint_url_public}")
+            return Response(
+                {"detail": f"Error al generar URL del archivo: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
         return Response({"upload": presigned, "file_url": file_url})
 

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ToastContainer";
 import { useAuth } from "@/store/auth";
+import PasswordInput from "@/components/PasswordInput";
 
 export default function ChangePasswordPage() {
   const router = useRouter();
@@ -97,35 +98,26 @@ export default function ChangePasswordPage() {
         </h1>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-              Contraseña Actual *
-            </label>
-            <input
-              type="password"
-              className={`input w-full ${errors.current_password ? "border-red-500" : ""}`}
-              value={form.current_password}
-              onChange={(e) => {
-                setForm({ ...form, current_password: e.target.value });
-                if (errors.current_password) {
-                  setErrors({ ...errors, current_password: "" });
-                }
-              }}
-            />
-            {errors.current_password && (
-              <p className="mt-1 text-sm text-red-600 dark:text-red-400">
-                {errors.current_password}
-              </p>
-            )}
-          </div>
+          <PasswordInput
+            id="current_password"
+            label="Contraseña Actual *"
+            value={form.current_password}
+            onChange={(e) => {
+              setForm({ ...form, current_password: e.target.value });
+              if (errors.current_password) {
+                setErrors({ ...errors, current_password: "" });
+              }
+            }}
+            placeholder="Ingresa tu contraseña actual"
+            required
+            autoComplete="current-password"
+            error={errors.current_password}
+          />
 
           <div>
-            <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-              Nueva Contraseña *
-            </label>
-            <input
-              type="password"
-              className={`input w-full ${errors.new_password ? "border-red-500" : ""}`}
+            <PasswordInput
+              id="new_password"
+              label="Nueva Contraseña *"
               value={form.new_password}
               onChange={(e) => {
                 setForm({ ...form, new_password: e.target.value });
@@ -133,38 +125,31 @@ export default function ChangePasswordPage() {
                   setErrors({ ...errors, new_password: "" });
                 }
               }}
+              placeholder="Mínimo 8 caracteres"
+              required
+              autoComplete="new-password"
+              error={errors.new_password}
             />
-            {errors.new_password && (
-              <p className="mt-1 text-sm text-red-600 dark:text-red-400">
-                {errors.new_password}
-              </p>
-            )}
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Mínimo 8 caracteres
             </p>
           </div>
 
-          <div>
-            <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-              Confirmar Nueva Contraseña *
-            </label>
-            <input
-              type="password"
-              className={`input w-full ${errors.confirm_password ? "border-red-500" : ""}`}
-              value={form.confirm_password}
-              onChange={(e) => {
-                setForm({ ...form, confirm_password: e.target.value });
-                if (errors.confirm_password) {
-                  setErrors({ ...errors, confirm_password: "" });
-                }
-              }}
-            />
-            {errors.confirm_password && (
-              <p className="mt-1 text-sm text-red-600 dark:text-red-400">
-                {errors.confirm_password}
-              </p>
-            )}
-          </div>
+          <PasswordInput
+            id="confirm_password"
+            label="Confirmar Nueva Contraseña *"
+            value={form.confirm_password}
+            onChange={(e) => {
+              setForm({ ...form, confirm_password: e.target.value });
+              if (errors.confirm_password) {
+                setErrors({ ...errors, confirm_password: "" });
+              }
+            }}
+            placeholder="Repite la nueva contraseña"
+            required
+            autoComplete="new-password"
+            error={errors.confirm_password}
+          />
 
           <div className="flex gap-4 pt-4">
             <button

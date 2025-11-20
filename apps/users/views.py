@@ -24,6 +24,8 @@ from django.shortcuts import render
 
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import SearchFilter, OrderingFilter
 from .models import User, Profile
 from .serializers import UserSerializer, ProfileSerializer
 from .permissions import UserPermission
@@ -60,17 +62,26 @@ class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by('id')  # QuerySet base: todos los usuarios ordenados por ID
     serializer_class = UserSerializer  # Serializer por defecto
     permission_classes = [UserPermission]  # Permisos personalizados
+    
+    # Configuración de filtros
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['rol', 'is_active']
+    search_fields = ['username', 'email', 'first_name', 'last_name', 'rut']
+    ordering_fields = ['username', 'email', 'date_joined']
+    ordering = ['username']
 
     def get_queryset(self):
         """
         Filtra el queryset para ocultar el usuario 'admin' a todos excepto al propio admin.
+        También aplica filtros de query params (rol, is_active, etc.)
         
         Reglas:
         - Solo el usuario con username 'admin' puede ver al usuario 'admin' en las listas
         - Todos los demás usuarios (incluso otros ADMIN) no verán al usuario 'admin'
+        - Filtra por rol si se proporciona ?rol=MECANICO
         
         Retorna:
-        - QuerySet filtrado según el usuario autenticado
+        - QuerySet filtrado según el usuario autenticado y query params
         """
         queryset = super().get_queryset()
         
@@ -78,6 +89,11 @@ class UserViewSet(viewsets.ModelViewSet):
         # Esto es más estricto que solo verificar el rol, ya que podría haber múltiples usuarios con rol ADMIN
         if self.request.user.is_authenticated and self.request.user.username != "admin":
             queryset = queryset.exclude(username="admin")
+        
+        # Aplicar filtro de rol si se proporciona
+        rol = self.request.query_params.get('rol')
+        if rol:
+            queryset = queryset.filter(rol=rol)
         
         return queryset
 

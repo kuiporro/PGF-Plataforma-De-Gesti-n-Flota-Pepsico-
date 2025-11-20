@@ -104,34 +104,38 @@ class EmergenciaRutaViewSet(viewsets.ModelViewSet):
         
         Lógica:
         - MECANICO: Ve solo sus emergencias asignadas
-        - SUPERVISOR: Ve emergencias de su zona
-        - COORDINADOR_ZONA: Ve emergencias que solicitó o de su zona
+        - SUPERVISOR: Ve emergencias asignadas a él
+        - COORDINADOR_ZONA: Ve emergencias que solicitó
         - JEFE_TALLER/ADMIN: Ven todas
         
         Retorna:
         - QuerySet filtrado según permisos
         """
         user = self.request.user
+        
+        # Verificar que el usuario tenga rol
+        if not hasattr(user, 'rol') or not user.rol:
+            return EmergenciaRuta.objects.none()
+        
         queryset = super().get_queryset()
         
         # Mecánico ve solo sus emergencias asignadas
         if user.rol == "MECANICO":
             return queryset.filter(mecanico_asignado=user)
         
-        # Supervisor ve emergencias de su zona
+        # Supervisor ve emergencias asignadas a él
         if user.rol == "SUPERVISOR":
             return queryset.filter(supervisor_asignado=user)
         
-        # Coordinador ve emergencias que solicitó o de su zona
+        # Coordinador ve emergencias que solicitó
         if user.rol == "COORDINADOR_ZONA":
-            return queryset.filter(
-                Q(solicitante=user) | Q(zona=user.profile.zona if hasattr(user, 'profile') else "")
-            )
+            return queryset.filter(solicitante=user)
         
-        # Jefe de Taller, Admin ven todas
-        if user.rol in ["JEFE_TALLER", "ADMIN"]:
+        # Jefe de Taller, Admin, Ejecutivo, Sponsor ven todas
+        if user.rol in ["JEFE_TALLER", "ADMIN", "EJECUTIVO", "SPONSOR"]:
             return queryset
         
+        # Por defecto, no mostrar nada si el rol no está contemplado
         return queryset.none()
     
     def perform_create(self, serializer):

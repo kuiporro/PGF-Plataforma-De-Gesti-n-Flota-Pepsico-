@@ -161,10 +161,10 @@ class VehiculoViewSet(viewsets.ModelViewSet):
         - Si hay una Agenda programada para hoy, se vincula con la OT
         - La OT se crea automáticamente con estado ABIERTA
         """
-        # Verificar que el usuario sea GUARDIA
-        if request.user.rol != "GUARDIA":
+        # Verificar permisos: GUARDIA, ADMIN pueden registrar ingresos
+        if request.user.rol not in ["GUARDIA", "ADMIN"]:
             return Response(
-                {"detail": "Solo el Guardia puede registrar ingresos."},
+                {"detail": "Solo el Guardia o Admin pueden registrar ingresos."},
                 status=status.HTTP_403_FORBIDDEN
             )
 
@@ -242,8 +242,10 @@ class VehiculoViewSet(viewsets.ModelViewSet):
             if chofer_rut:
                 es_valido, rut_formateado = validar_rut_chileno(chofer_rut)
                 if es_valido:
+                    # Limpiar RUT (sin puntos ni guión)
+                    rut_limpio = rut_formateado.replace("-", "").replace(".", "")
                     chofer, created = Chofer.objects.get_or_create(
-                        rut=rut_formateado.replace("-", "").replace(".", ""),
+                        rut=rut_limpio,
                         defaults={
                             "nombre_completo": chofer_nombre or "Chofer sin nombre",
                             "activo": True,
@@ -253,10 +255,8 @@ class VehiculoViewSet(viewsets.ModelViewSet):
                     if not created and chofer_nombre:
                         chofer.nombre_completo = chofer_nombre
                         chofer.save(update_fields=["nombre_completo"])
-                elif chofer_nombre:
-                    # Si el RUT no es válido pero hay nombre, crear chofer sin RUT (no recomendado)
-                    # Por ahora, no crear chofer si el RUT no es válido
-                    pass
+                # Si el RUT no es válido, simplemente no crear chofer (no es obligatorio)
+                # El usuario puede registrar el ingreso sin chofer
         
         # Crear OT automáticamente
         ot = OrdenTrabajo.objects.create(
@@ -327,7 +327,7 @@ class VehiculoViewSet(viewsets.ModelViewSet):
         Endpoint: GET /api/v1/vehicles/ingreso/{ingreso_id}/ticket/
         
         Permisos:
-        - Requiere autenticación
+        - GUARDIA, ADMIN, SUPERVISOR, JEFE_TALLER
         
         Retorna:
         - PDF del ticket de ingreso
@@ -335,27 +335,35 @@ class VehiculoViewSet(viewsets.ModelViewSet):
         from apps.reports.pdf_generator import generar_ticket_ingreso_pdf
         from django.http import HttpResponse
         
+        # Verificar permisos
+        if request.user.rol not in ["GUARDIA", "ADMIN", "SUPERVISOR", "JEFE_TALLER"]:
+            return Response(
+                {"detail": "No tiene permiso para generar tickets de ingreso."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
         try:
-            pdf_buffer = generar_ticket_ingreso_pdf(ingreso_id)
+            # Generar PDF (la función busca el ingreso internamente)
+            pdf_buffer = generar_ticket_ingreso_pdf(str(ingreso_id))
             
             # Crear respuesta HTTP con el PDF
             response = HttpResponse(
                 pdf_buffer.getvalue(),
                 content_type='application/pdf'
             )
-            response['Content-Disposition'] = f'inline; filename="ticket_ingreso_{ingreso_id[:8]}.pdf"'
+            response['Content-Disposition'] = f'inline; filename="ticket_ingreso_{str(ingreso_id)[:8]}.pdf"'
             return response
-        except ValueError as e:
+        except IngresoVehiculo.DoesNotExist:
             return Response(
-                {"detail": str(e)},
+                {"detail": "Ingreso no encontrado."},
                 status=status.HTTP_404_NOT_FOUND
             )
         except Exception as e:
             import logging
             logger = logging.getLogger(__name__)
-            logger.error(f"Error al generar ticket de ingreso: {e}")
+            logger.error(f"Error al generar ticket de ingreso: {e}", exc_info=True)
             return Response(
-                {"detail": "Error al generar el ticket de ingreso"},
+                {"detail": f"Error al generar el ticket de ingreso: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -373,7 +381,7 @@ class VehiculoViewSet(viewsets.ModelViewSet):
         Endpoint: POST /api/v1/vehicles/salida/
         
         Permisos:
-        - Solo GUARDIA puede registrar salidas
+        - GUARDIA, ADMIN, JEFE_TALLER pueden registrar salidas
         
         Body JSON:
         {
@@ -382,10 +390,10 @@ class VehiculoViewSet(viewsets.ModelViewSet):
             "kilometraje_salida": 50000  // Opcional
         }
         """
-        # Verificar que el usuario sea GUARDIA
-        if request.user.rol != "GUARDIA":
+        # Verificar permisos: GUARDIA, ADMIN, JEFE_TALLER pueden registrar salidas
+        if request.user.rol not in ["GUARDIA", "ADMIN", "JEFE_TALLER"]:
             return Response(
-                {"detail": "Solo el Guardia puede registrar salidas."},
+                {"detail": "No tiene permiso para registrar salidas. Solo Guardia, Admin o Jefe de Taller pueden hacerlo."},
                 status=status.HTTP_403_FORBIDDEN
             )
         
@@ -396,8 +404,12 @@ class VehiculoViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Convertir a string si es UUID
+        if hasattr(ingreso_id, '__str__'):
+            ingreso_id = str(ingreso_id)
+        
         try:
-            ingreso = IngresoVehiculo.objects.get(id=ingreso_id)
+            ingreso = IngresoVehiculo.objects.select_related('vehiculo').get(id=ingreso_id)
         except IngresoVehiculo.DoesNotExist:
             return Response(
                 {"detail": "Ingreso no encontrado."},
@@ -427,8 +439,18 @@ class VehiculoViewSet(viewsets.ModelViewSet):
         # Registrar salida
         ingreso.fecha_salida = timezone.now()
         ingreso.guardia_salida = request.user
-        ingreso.observaciones_salida = request.data.get("observaciones_salida", "")
-        ingreso.kilometraje_salida = request.data.get("kilometraje_salida")
+        ingreso.observaciones_salida = request.data.get("observaciones_salida", "") or ""
+        
+        # Manejar kilometraje_salida: puede ser None, string vacío, o número
+        kilometraje_salida = request.data.get("kilometraje_salida")
+        if kilometraje_salida is not None and kilometraje_salida != "":
+            try:
+                ingreso.kilometraje_salida = int(kilometraje_salida)
+            except (ValueError, TypeError):
+                ingreso.kilometraje_salida = None
+        else:
+            ingreso.kilometraje_salida = None
+        
         ingreso.salio = True
         ingreso.save()
         
@@ -514,6 +536,100 @@ class VehiculoViewSet(viewsets.ModelViewSet):
             "fecha": hoy.isoformat(),
             "total": ingresos.count(),
             "ingresos": serializer.data
+        })
+
+    @extend_schema(
+        description="Obtiene el historial completo de ingresos con filtros de fecha",
+        responses={200: None}
+    )
+    @action(detail=False, methods=['get'], url_path='ingresos-historial', permission_classes=[permissions.IsAuthenticated])
+    def ingresos_historial(self, request):
+        """
+        Obtiene el historial completo de ingresos con filtros de fecha.
+        
+        Endpoint: GET /api/v1/vehicles/ingresos-historial/
+        
+        Permisos:
+        - GUARDIA, ADMIN, SUPERVISOR, JEFE_TALLER
+        
+        Query params:
+        - patente: Filtrar por patente (opcional)
+        - fecha_desde: Fecha de inicio (YYYY-MM-DD) (opcional, por defecto: últimos 30 días)
+        - fecha_hasta: Fecha de fin (YYYY-MM-DD) (opcional, por defecto: hoy)
+        - salio: Filtrar por estado de salida (true/false) (opcional)
+        - page: Número de página (opcional, por defecto: 1)
+        - page_size: Tamaño de página (opcional, por defecto: 50)
+        
+        Retorna:
+        - 200: Lista paginada de ingresos con información completa
+        """
+        # Verificar permisos
+        if request.user.rol not in ["GUARDIA", "ADMIN", "SUPERVISOR", "JEFE_TALLER"]:
+            return Response(
+                {"detail": "No tiene permisos para ver historial de ingresos."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Obtener parámetros de filtro
+        patente = request.query_params.get("patente", "").strip().upper()
+        fecha_desde = request.query_params.get("fecha_desde", "")
+        fecha_hasta = request.query_params.get("fecha_hasta", "")
+        salio_param = request.query_params.get("salio", "")
+        page = int(request.query_params.get("page", 1))
+        page_size = int(request.query_params.get("page_size", 50))
+        
+        # Construir queryset base
+        ingresos = IngresoVehiculo.objects.select_related("vehiculo", "guardia", "guardia_salida").order_by("-fecha_ingreso")
+        
+        # Filtrar por patente si se proporciona
+        if patente:
+            ingresos = ingresos.filter(vehiculo__patente__icontains=patente)
+        
+        # Filtrar por fecha desde
+        if fecha_desde:
+            try:
+                from datetime import datetime
+                fecha_desde_obj = datetime.strptime(fecha_desde, "%Y-%m-%d").date()
+                ingresos = ingresos.filter(fecha_ingreso__date__gte=fecha_desde_obj)
+            except ValueError:
+                pass  # Ignorar fecha inválida
+        
+        # Filtrar por fecha hasta
+        if fecha_hasta:
+            try:
+                from datetime import datetime
+                fecha_hasta_obj = datetime.strptime(fecha_hasta, "%Y-%m-%d").date()
+                ingresos = ingresos.filter(fecha_ingreso__date__lte=fecha_hasta_obj)
+            except ValueError:
+                pass  # Ignorar fecha inválida
+        
+        # Si no se proporcionaron fechas, usar últimos 30 días por defecto
+        if not fecha_desde and not fecha_hasta:
+            from datetime import timedelta
+            fecha_desde_default = timezone.now().date() - timedelta(days=30)
+            ingresos = ingresos.filter(fecha_ingreso__date__gte=fecha_desde_default)
+        
+        # Filtrar por estado de salida
+        if salio_param.lower() == "true":
+            ingresos = ingresos.filter(salio=True)
+        elif salio_param.lower() == "false":
+            ingresos = ingresos.filter(salio=False)
+        
+        # Paginación
+        total = ingresos.count()
+        start = (page - 1) * page_size
+        end = start + page_size
+        ingresos_paginados = ingresos[start:end]
+        
+        # Serializar
+        serializer = IngresoVehiculoSerializer(ingresos_paginados, many=True)
+        
+        return Response({
+            "count": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size,
+            "results": serializer.data
         })
 
     @extend_schema(

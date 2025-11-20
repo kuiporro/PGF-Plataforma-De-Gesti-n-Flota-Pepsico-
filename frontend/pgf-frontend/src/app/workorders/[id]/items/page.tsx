@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import { ENDPOINTS } from "@/lib/constants";
 import { withSession } from "@/lib/api.client";
 import Link from "next/link";
 
-export default function ItemsPage({ params }: any) {
-  const otId = params.id;
+export default function ItemsPage() {
+  const params = useParams();
+  const otId = params.id as string;
   const [rows, setRows] = useState<any[]>([]);
 
   const load = async () => {

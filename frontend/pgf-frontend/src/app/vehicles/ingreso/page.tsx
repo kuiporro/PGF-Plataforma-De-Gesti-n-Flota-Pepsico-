@@ -45,6 +45,10 @@ export default function IngresoVehiculoPage() {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [ingresoRegistrado, setIngresoRegistrado] = useState<{ id: string; ot_generada?: any } | null>(null);
+  const [vehiculoEncontrado, setVehiculoEncontrado] = useState<any>(null);
+  const [historialIngresos, setHistorialIngresos] = useState<any[]>([]);
+  const [mostrarHistorial, setMostrarHistorial] = useState(false);
+  const [buscandoVehiculo, setBuscandoVehiculo] = useState(false);
 
   const canAccess = hasRole(["GUARDIA", "ADMIN"]);
 
@@ -65,6 +69,69 @@ export default function IngresoVehiculoPage() {
         delete newErrors[field];
         return newErrors;
       });
+    }
+    
+    // Si cambia la patente, buscar el vehículo
+    if (field === "patente" && value.trim().length >= 3) {
+      buscarVehiculo(value.trim().toUpperCase());
+    } else if (field === "patente" && value.trim().length === 0) {
+      setVehiculoEncontrado(null);
+      setHistorialIngresos([]);
+    }
+  };
+
+  const buscarVehiculo = async (patente: string) => {
+    if (!patente || patente.length < 3) return;
+    
+    setBuscandoVehiculo(true);
+    try {
+      // Buscar vehículo por patente
+      const response = await fetch(`${ENDPOINTS.VEHICLES}?patente=${encodeURIComponent(patente)}`, {
+        method: "GET",
+        ...withSession(),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const vehiculos = data.results || data || [];
+        if (vehiculos.length > 0) {
+          const vehiculo = vehiculos[0];
+          setVehiculoEncontrado(vehiculo);
+          
+          // Cargar historial de ingresos del vehículo
+          cargarHistorialIngresos(vehiculo.id);
+          
+          // Prellenar campos si el vehículo existe
+          if (!form.marca) setForm(prev => ({ ...prev, marca: vehiculo.marca || "" }));
+          if (!form.modelo) setForm(prev => ({ ...prev, modelo: vehiculo.modelo || "" }));
+          if (!form.anio) setForm(prev => ({ ...prev, anio: vehiculo.anio ? String(vehiculo.anio) : "" }));
+          if (!form.vin) setForm(prev => ({ ...prev, vin: vehiculo.vin || "" }));
+        } else {
+          setVehiculoEncontrado(null);
+          setHistorialIngresos([]);
+        }
+      }
+    } catch (error) {
+      console.error("Error al buscar vehículo:", error);
+    } finally {
+      setBuscandoVehiculo(false);
+    }
+  };
+
+  const cargarHistorialIngresos = async (vehiculoId: string) => {
+    try {
+      const response = await fetch(`${ENDPOINTS.VEHICLES}${vehiculoId}/historial/`, {
+        method: "GET",
+        ...withSession(),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setHistorialIngresos(data.ingresos || []);
+      }
+    } catch (error) {
+      console.error("Error al cargar historial:", error);
+      setHistorialIngresos([]);
     }
   };
 
@@ -104,14 +171,25 @@ export default function IngresoVehiculoPage() {
         }),
       });
 
-      const data = await response.json();
+      const text = await response.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { detail: text || "Error desconocido" };
+      }
 
       if (!response.ok) {
         // Manejar errores de validación
         if (data.patente) {
-          setErrors({ patente: data.patente[0] });
+          setErrors({ patente: Array.isArray(data.patente) ? data.patente[0] : data.patente });
+        } else if (data.chofer_rut) {
+          setErrors({ chofer_rut: Array.isArray(data.chofer_rut) ? data.chofer_rut[0] : data.chofer_rut });
+          toast.error("Error en el RUT del chofer");
         } else if (data.detail) {
-          toast.error(data.detail);
+          toast.error(typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail));
+        } else if (data.message) {
+          toast.error(data.message);
         } else {
           toast.error("Error al registrar ingreso");
         }
@@ -191,18 +269,96 @@ export default function IngresoVehiculoPage() {
                 <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
                   Patente <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  value={form.patente}
-                  onChange={(e) => handleChange("patente", e.target.value)}
-                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white ${
-                    errors.patente ? "border-red-500" : "border-gray-300 dark:border-gray-600"
-                  }`}
-                  placeholder="ABC123"
-                  required
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={form.patente}
+                    onChange={(e) => handleChange("patente", e.target.value)}
+                    className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white ${
+                      errors.patente ? "border-red-500" : "border-gray-300 dark:border-gray-600"
+                    }`}
+                    placeholder="ABC123"
+                    required
+                  />
+                  {buscandoVehiculo && (
+                    <div className="absolute right-3 top-2.5">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                    </div>
+                  )}
+                </div>
                 {errors.patente && (
                   <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.patente}</p>
+                )}
+                {vehiculoEncontrado && (
+                  <div className="mt-2 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-green-800 dark:text-green-300">
+                          ✓ Vehículo encontrado: {vehiculoEncontrado.patente}
+                        </p>
+                        <p className="text-xs text-green-700 dark:text-green-400 mt-1">
+                          {vehiculoEncontrado.marca} {vehiculoEncontrado.modelo} ({vehiculoEncontrado.anio || "N/A"})
+                        </p>
+                        <p className="text-xs text-green-700 dark:text-green-400">
+                          Estado: {vehiculoEncontrado.estado}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setMostrarHistorial(!mostrarHistorial)}
+                        className="px-3 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+                      >
+                        {mostrarHistorial ? "Ocultar" : "Ver"} Historial
+                      </button>
+                    </div>
+                    {mostrarHistorial && historialIngresos.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-green-200 dark:border-green-800">
+                        <p className="text-xs font-medium text-green-800 dark:text-green-300 mb-2">
+                          Historial de Ingresos ({historialIngresos.length}):
+                        </p>
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {historialIngresos.map((ingreso: any) => (
+                            <div
+                              key={ingreso.id}
+                              className="text-xs bg-white dark:bg-gray-800 p-2 rounded border border-green-200 dark:border-green-800"
+                            >
+                              <div className="flex justify-between">
+                                <span className="text-gray-700 dark:text-gray-300">
+                                  {new Date(ingreso.fecha_ingreso).toLocaleDateString("es-CL", {
+                                    day: "2-digit",
+                                    month: "2-digit",
+                                    year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </span>
+                                <span className={`px-2 py-0.5 rounded text-xs ${
+                                  ingreso.salio
+                                    ? "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                                    : "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                                }`}>
+                                  {ingreso.salio ? "Salido" : "En Taller"}
+                                </span>
+                              </div>
+                              {ingreso.observaciones && (
+                                <p className="mt-1 text-gray-600 dark:text-gray-400 text-xs">
+                                  {ingreso.observaciones.substring(0, 100)}
+                                  {ingreso.observaciones.length > 100 ? "..." : ""}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {mostrarHistorial && historialIngresos.length === 0 && (
+                      <div className="mt-3 pt-3 border-t border-green-200 dark:border-green-800">
+                        <p className="text-xs text-green-700 dark:text-green-400">
+                          No hay ingresos previos registrados para este vehículo.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -390,12 +546,17 @@ export default function IngresoVehiculoPage() {
                   type="text"
                   value={form.chofer_rut}
                   onChange={(e) => handleChange("chofer_rut", e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white ${
+                    errors.chofer_rut ? "border-red-500" : "border-gray-300 dark:border-gray-600"
+                  }`}
                   placeholder="12345678-5"
                 />
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Formato: 12345678-5 o 123456785
+                  Formato: 12345678-5 o 123456785 (opcional - si el chofer ya existe, se usará el existente)
                 </p>
+                {errors.chofer_rut && (
+                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.chofer_rut}</p>
+                )}
               </div>
             </div>
           </div>

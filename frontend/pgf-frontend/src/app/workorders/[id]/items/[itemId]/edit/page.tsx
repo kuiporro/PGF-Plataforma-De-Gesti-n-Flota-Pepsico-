@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { ENDPOINTS } from "@/lib/constants";
 import { withSession } from "@/lib/api.client";
-import { useRouter } from "next/navigation";
 
-export default function EditItem({ params }: any) {
-  const otId = params.id;
-  const itemId = params.itemId;
+export default function EditItem() {
+  const params = useParams();
+  const otId = params.id as string;
+  const itemId = params.itemId as string;
 
   const router = useRouter();
 

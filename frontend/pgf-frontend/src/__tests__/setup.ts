@@ -12,15 +12,22 @@ afterEach(() => {
 })
 
 // Mock Next.js router
+const mockRouter = {
+  push: vi.fn(),
+  replace: vi.fn(),
+  prefetch: vi.fn(),
+  back: vi.fn(),
+  forward: vi.fn(),
+  refresh: vi.fn(),
+};
+
+const mockUseParams = vi.fn(() => ({}));
+
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({
-    push: vi.fn(),
-    replace: vi.fn(),
-    prefetch: vi.fn(),
-    back: vi.fn(),
-  }),
+  useRouter: () => mockRouter,
   usePathname: () => '/',
   useSearchParams: () => new URLSearchParams(),
+  useParams: () => mockUseParams(),
 }))
 
 // Mock fetch globally
@@ -34,4 +41,16 @@ const localStorageMock = {
   clear: vi.fn(),
 }
 global.localStorage = localStorageMock as any
+
+// Mock useAuth store
+vi.mock('@/store/auth', () => ({
+  useAuth: vi.fn(() => ({
+    user: { id: '1', username: 'test', rol: 'ADMIN' },
+    setUser: vi.fn(),
+    allowed: vi.fn(() => true),
+    hasRole: vi.fn(() => true),
+    isLogged: vi.fn(() => true),
+    refreshMe: vi.fn(() => Promise.resolve()),
+  })),
+}))
 

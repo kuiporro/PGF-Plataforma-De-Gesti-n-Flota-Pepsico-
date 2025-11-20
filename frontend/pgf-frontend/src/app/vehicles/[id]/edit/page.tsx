@@ -4,12 +4,18 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useToast } from "@/components/ToastContainer";
 import { validateVehicle } from "@/lib/validations";
+import { useAuth } from "@/store/auth";
+import { handleApiError, getRoleHomePage } from "@/lib/permissions";
 
 export default function EditVehicle() {
   const router = useRouter();
   const params = useParams();
   const id = params?.id as string;
   const toast = useToast();
+  const { hasRole, user } = useAuth();
+  
+  // Verificar permisos: ADMIN, JEFE_TALLER, COORDINADOR_ZONA pueden editar
+  const canEdit = hasRole(["ADMIN", "JEFE_TALLER", "COORDINADOR_ZONA"]);
 
   const [form, setForm] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -37,7 +43,11 @@ export default function EditVehicle() {
         }
         
         const data = JSON.parse(text);
-        setForm({ ...data, anio: String(data.anio) });
+        setForm({ 
+          ...data, 
+          anio: String(data.anio || ""),
+          estado: data.estado || "ACTIVO" // Asegurar que el estado tenga un valor por defecto
+        });
       } catch (e) {
         console.error("Error:", e);
         toast.error("Error al cargar el vehículo");
@@ -47,8 +57,14 @@ export default function EditVehicle() {
       }
     };
     
-    if (id) load();
-  }, [id, router, toast]);
+    if (id && canEdit) load();
+    else if (!canEdit) {
+      toast.error("Permisos insuficientes. No tiene acceso para editar vehículos.");
+      setTimeout(() => {
+        router.push(getRoleHomePage(user?.rol));
+      }, 2000);
+    }
+  }, [id, router, toast, canEdit, user?.rol]);
 
   const update = (k: string, v: string) => {
     setForm({ ...form, [k]: v });
@@ -89,7 +105,14 @@ export default function EditVehicle() {
       }
 
       if (!r.ok) {
-        toast.error(data.detail || "Error al actualizar el vehículo");
+        if (r.status === 403) {
+          toast.error("Permisos insuficientes. No tiene acceso para editar vehículos.");
+          setTimeout(() => {
+            router.push(getRoleHomePage(user?.rol));
+          }, 2000);
+          return;
+        }
+        handleApiError({ status: r.status, detail: data.detail }, router, toast, user?.rol);
         if (data.errors) {
           setErrors(data.errors);
         }
@@ -116,6 +139,13 @@ export default function EditVehicle() {
       </div>
     );
   }
+
+  const estados = [
+    { value: "ACTIVO", label: "Activo" },
+    { value: "EN_ESPERA", label: "En Espera" },
+    { value: "EN_MANTENIMIENTO", label: "En Mantenimiento" },
+    { value: "BAJA", label: "Baja" },
+  ];
 
   const fields = [
     { key: "patente", label: "Patente", placeholder: "ABC123 o ABC-123", type: "text" },
@@ -148,6 +178,32 @@ export default function EditVehicle() {
             )}
           </div>
         ))}
+
+        {/* Campo de Estado */}
+        <div>
+          <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+            Estado *
+          </label>
+          <select
+            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white dark:border-gray-600 transition-all ${
+              errors.estado ? "border-red-500" : "border-gray-300"
+            }`}
+            value={(form as any).estado || "ACTIVO"}
+            onChange={(e) => update("estado", e.target.value)}
+          >
+            {estados.map((estado) => (
+              <option key={estado.value} value={estado.value}>
+                {estado.label}
+              </option>
+            ))}
+          </select>
+          {errors.estado && (
+            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.estado}</p>
+          )}
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Estado actual del vehículo en el sistema
+          </p>
+        </div>
 
         <div className="flex gap-4 pt-4">
           <button

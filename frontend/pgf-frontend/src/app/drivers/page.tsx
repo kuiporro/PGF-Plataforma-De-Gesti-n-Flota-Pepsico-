@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useToast } from "@/components/ToastContainer";
 import { useAuth } from "@/store/auth";
+import { ENDPOINTS } from "@/lib/constants";
+import { withSession } from "@/lib/api.client";
 
 export default function DriversPage() {
   const [rows, setRows] = useState<any[]>([]);
@@ -17,8 +19,8 @@ export default function DriversPage() {
 
   async function load(page: number = 1) {
     try {
-      const r = await fetch(`/api/proxy/drivers/?page=${page}&page_size=${itemsPerPage}`, {
-        credentials: "include",
+      const r = await fetch(`${ENDPOINTS.DRIVERS}?page=${page}&page_size=${itemsPerPage}`, {
+        ...withSession(),
       });
       
       if (!r.ok) {
@@ -27,7 +29,11 @@ export default function DriversPage() {
           setRows([]);
           return;
         }
-        throw new Error(`HTTP ${r.status}`);
+        const errorText = await r.text().catch(() => "Error desconocido");
+        console.error(`Error HTTP ${r.status} al cargar choferes:`, errorText);
+        toast.error(`Error al cargar choferes: ${r.status}`);
+        setRows([]);
+        return;
       }
       
       const text = await r.text();
@@ -59,15 +65,25 @@ export default function DriversPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Choferes</h1>
-        {canEdit && (
-          <Link 
-            href="/drivers/create" 
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium shadow-sm hover:shadow"
-            style={{ backgroundColor: '#003DA5' }}
-          >
-            + Nuevo Chofer
-          </Link>
-        )}
+        <div className="flex gap-3">
+          {canEdit && (
+            <>
+              <Link 
+                href="/drivers/asignacion" 
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors font-medium shadow-sm hover:shadow"
+              >
+                🚗 Asignar Vehículos
+              </Link>
+              <Link 
+                href="/drivers/create" 
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium shadow-sm hover:shadow"
+                style={{ backgroundColor: '#003DA5' }}
+              >
+                + Nuevo Chofer
+              </Link>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">

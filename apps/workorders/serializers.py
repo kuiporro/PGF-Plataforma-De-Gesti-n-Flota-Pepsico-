@@ -171,10 +171,12 @@ class EvidenciaSerializer(serializers.ModelSerializer):
     invalidado = serializers.BooleanField(read_only=True)
     invalidado_por_nombre = serializers.CharField(source="invalidado_por.get_full_name", read_only=True)
     invalidado_en = serializers.DateTimeField(read_only=True)
+    subido_por_nombre = serializers.CharField(source="subido_por.get_full_name", read_only=True)
     
     class Meta:
         model = Evidencia
         fields = "__all__"
+        read_only_fields = ["subido_en", "subido_por"]
 
 
 class ComentarioOTSerializer(serializers.ModelSerializer):
