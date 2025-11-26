@@ -31,6 +31,7 @@ SOLICITADA -> APROBADA -> ASIGNADA -> EN_CAMINO -> EN_SITIO -> RESUELTA -> CERRA
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.exceptions import PermissionDenied
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django.utils import timezone
@@ -156,7 +157,7 @@ class EmergenciaRutaViewSet(viewsets.ModelViewSet):
         
         # Solo Supervisor o Coordinador pueden solicitar
         if user.rol not in ["SUPERVISOR", "COORDINADOR_ZONA"]:
-            raise permissions.PermissionDenied(
+            raise PermissionDenied(
                 "Solo Supervisores o Coordinadores pueden solicitar emergencias"
             )
         

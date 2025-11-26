@@ -47,6 +47,17 @@ export default function JefeTallerDashboardPage() {
         const dashboardData = await dashboardResponse.json();
         setKpis(dashboardData.kpis || {});
         setMecanicosCarga(dashboardData.mecanicos_carga || []);
+      } else {
+        const errorText = await dashboardResponse.text();
+        let errorMessage = "Error al cargar KPIs del dashboard";
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.detail || errorMessage;
+        } catch {
+          errorMessage = errorText || errorMessage;
+        }
+        console.error("Error al cargar dashboard:", errorMessage);
+        toast.error(errorMessage);
       }
 
       // Cargar OTs del día
@@ -59,6 +70,8 @@ export default function JefeTallerDashboardPage() {
       if (otsResponse.ok) {
         const otsData = await otsResponse.json();
         setOtsHoy(otsData.results || otsData || []);
+      } else {
+        console.error("Error al cargar OTs del día:", otsResponse.status, otsResponse.statusText);
       }
     } catch (error) {
       console.error("Error al cargar datos:", error);

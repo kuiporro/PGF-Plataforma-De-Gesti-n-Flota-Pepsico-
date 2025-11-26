@@ -182,12 +182,18 @@ export default function UsersPage() {
                       >
                         Editar
                       </Link>
-                      <Link
-                        href={`/users/${u.id}/delete`}
-                        className="text-red-600 dark:text-red-400 hover:underline text-sm"
-                      >
-                        Eliminar
-                      </Link>
+                      {!u.is_permanent ? (
+                        <Link
+                          href={`/users/${u.id}/delete`}
+                          className="text-red-600 dark:text-red-400 hover:underline text-sm"
+                        >
+                          Eliminar
+                        </Link>
+                      ) : (
+                        <span className="text-gray-400 dark:text-gray-500 text-sm cursor-not-allowed" title="Usuario permanente - no se puede eliminar">
+                          Eliminar
+                        </span>
+                      )}
                     </div>
                   </td>
                 </tr>

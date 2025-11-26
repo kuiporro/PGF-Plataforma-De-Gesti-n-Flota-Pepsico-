@@ -19,8 +19,10 @@ ALLOWED_ROLES_READ = {
     "COORDINADOR_ZONA", "SPONSOR", "CHOFER", "EJECUTIVO"
 }
 
-# Roles que pueden crear OT (Jefe de Taller, Admin, y Guardia a través del flujo de ingreso)
-ALLOWED_ROLES_CREATE = {"JEFE_TALLER", "ADMIN", "GUARDIA"}
+# Roles que pueden crear OT directamente (Jefe de Taller y Admin)
+# NOTA: GUARDIA puede crear OT a través del flujo de ingreso de vehículos,
+# pero NO puede crear OT directamente desde el endpoint de creación
+ALLOWED_ROLES_CREATE = {"JEFE_TALLER", "ADMIN"}
 
 # Roles que pueden editar OT (solo Jefe de Taller)
 ALLOWED_ROLES_UPDATE = {"JEFE_TALLER", "ADMIN"}
@@ -87,6 +89,9 @@ class WorkOrderPermission(BasePermission):
                 is_evidencia_view = "/evidencias/" in request.path or "/evidencia/" in request.path
             
             if is_evidencia_view:
+                # ADMIN siempre tiene acceso total a evidencias
+                if rol == "ADMIN":
+                    return True
                 return rol in ALLOWED_ROLES_VIEW_EVIDENCIA
             
             return rol in ALLOWED_ROLES_READ
@@ -127,6 +132,9 @@ class WorkOrderPermission(BasePermission):
         
         # Crear evidencia: Mecánico, Supervisor, Admin, Guardia, Jefe de Taller
         if request.method == "POST" and action == "create" and is_evidencia_view:
+            # ADMIN siempre puede crear evidencias
+            if rol == "ADMIN":
+                return True
             return rol in ALLOWED_ROLES_CREATE_EVIDENCIA
         
         # Crear comentario: Mecánico, Supervisor, Admin, Jefe de Taller, Guardia, Coordinador
@@ -148,7 +156,14 @@ class WorkOrderPermission(BasePermission):
         # Acciones personalizadas se validan en has_object_permission
         # Permitir POST para acciones personalizadas (se validan en la view)
         if request.method == "POST" and action not in ("create",):
+            # ADMIN siempre tiene acceso
+            if rol == "ADMIN":
+                return True
             return rol in ALLOWED_ROLES_READ  # Permitir acceso, validación en view
+        
+        # ADMIN siempre tiene acceso para otros métodos (PUT, PATCH, DELETE en evidencias)
+        if rol == "ADMIN" and is_evidencia_view:
+            return True
         
         return False
 
@@ -185,7 +200,7 @@ class WorkOrderPermission(BasePermission):
                     return False
                 return False
             
-            # Administrador: acceso total
+            # Administrador: acceso total (siempre permitir)
             if rol == "ADMIN":
                 return True
             

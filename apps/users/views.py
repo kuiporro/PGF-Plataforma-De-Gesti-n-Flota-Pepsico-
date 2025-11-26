@@ -97,6 +97,50 @@ class UserViewSet(viewsets.ModelViewSet):
         
         return queryset
 
+    def destroy(self, request, *args, **kwargs):
+        """
+        Eliminar usuario con manejo de errores mejorado.
+        
+        Captura excepciones y siempre retorna JSON en lugar de HTML.
+        """
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except Exception as e:
+            # Capturar cualquier excepción y retornar JSON
+            from rest_framework.exceptions import ValidationError, PermissionDenied
+            from django.db.models.deletion import ProtectedError
+            from rest_framework import status
+            
+            if isinstance(e, (ValidationError, PermissionDenied)):
+                # Re-lanzar excepciones de DRF (ya están en formato JSON)
+                raise
+            
+            if isinstance(e, ProtectedError):
+                # ProtectedError de Django
+                objetos_protegidos = []
+                for obj in e.protected_objects[:5]:  # Limitar a 5 para no hacer el mensaje muy largo
+                    objetos_protegidos.append(f"{obj._meta.verbose_name} (ID: {obj.pk})")
+                
+                mensaje = f"No se puede eliminar el usuario porque está relacionado con: {', '.join(objetos_protegidos)}"
+                if len(e.protected_objects) > 5:
+                    mensaje += f" y {len(e.protected_objects) - 5} más."
+                mensaje += " Primero debe eliminar o modificar estas relaciones."
+                
+                return Response(
+                    {"detail": mensaje},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Cualquier otro error
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error al eliminar usuario: {str(e)}", exc_info=True)
+            
+            return Response(
+                {"detail": f"Error al eliminar el usuario: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     def perform_destroy(self, instance):
         """
         Eliminar usuario de forma segura.
@@ -109,45 +153,128 @@ class UserViewSet(viewsets.ModelViewSet):
         - instance: Instancia de User a eliminar
         
         Proceso:
-        1. Intenta limpiar MovimientoStock relacionados (si existe la tabla)
-        2. Intenta limpiar SolicitudRepuesto relacionadas (si existe la tabla)
-        3. Elimina el usuario
+        1. Verifica que el usuario no sea permanente
+        2. Verifica relaciones PROTECT antes de intentar eliminar
+        3. Intenta limpiar relaciones SET_NULL (si existen)
+        4. Elimina el usuario
         
         Nota: Usa try/except para que si las tablas no existen,
         la eliminación continúe sin errores.
         """
+        # Prevenir eliminación de usuarios permanentes
+        if instance.is_permanent:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied(
+                detail="No se puede eliminar un usuario permanente. Solo se puede editar y ver."
+            )
+        
+        # Verificar relaciones PROTECT antes de intentar eliminar
+        relaciones_protegidas = []
+        
+        # Verificar MovimientoStock (PROTECT)
         try:
-            # Intentar eliminar movimientos de stock relacionados
-            # MovimientoStock puede tener ForeignKey a User
             from apps.inventory.models import MovimientoStock
-            MovimientoStock.objects.filter(usuario=instance).update(usuario=None)
+            count = MovimientoStock.objects.filter(usuario=instance).count()
+            if count > 0:
+                relaciones_protegidas.append(f"{count} movimiento(s) de stock")
         except Exception:
-            # Si la tabla no existe o hay error, continuar
-            # Esto permite que el sistema funcione aunque inventory no esté migrado
             pass
         
+        # Verificar SolicitudRepuesto.solicitante (PROTECT)
         try:
-            # Intentar eliminar solicitudes de repuestos relacionadas
-            # SolicitudRepuesto puede tener ForeignKey a User en múltiples campos
             from apps.inventory.models import SolicitudRepuesto
-            SolicitudRepuesto.objects.filter(
-                solicitante=instance
-            ).update(solicitante=None)
-            SolicitudRepuesto.objects.filter(
-                aprobador=instance
-            ).update(aprobador=None)
-            SolicitudRepuesto.objects.filter(
-                entregador=instance
-            ).update(entregador=None)
+            count = SolicitudRepuesto.objects.filter(solicitante=instance).count()
+            if count > 0:
+                relaciones_protegidas.append(f"{count} solicitud(es) de repuestos")
         except Exception:
-            # Si la tabla no existe o hay error, continuar
             pass
         
-        # Eliminar el usuario
+        # Verificar Pausa (PROTECT)
+        try:
+            from apps.workorders.models import Pausa
+            count = Pausa.objects.filter(usuario=instance).count()
+            if count > 0:
+                relaciones_protegidas.append(f"{count} pausa(s) de órdenes de trabajo")
+        except Exception:
+            pass
+        
+        # Verificar Aprobacion.sponsor (PROTECT)
+        try:
+            from apps.workorders.models import Aprobacion
+            count = Aprobacion.objects.filter(sponsor=instance).count()
+            if count > 0:
+                relaciones_protegidas.append(f"{count} aprobación(es)")
+        except Exception:
+            pass
+        
+        # Verificar IngresoVehiculo.guardia (PROTECT)
+        try:
+            from apps.vehicles.models import IngresoVehiculo
+            count = IngresoVehiculo.objects.filter(guardia=instance).count()
+            if count > 0:
+                relaciones_protegidas.append(f"{count} ingreso(s) de vehículos registrado(s)")
+        except Exception:
+            pass
+        
+        # Verificar Agenda.coordinador (PROTECT)
+        try:
+            from apps.scheduling.models import Agenda
+            count = Agenda.objects.filter(coordinador=instance).count()
+            if count > 0:
+                relaciones_protegidas.append(f"{count} agenda(s) creada(s)")
+        except Exception:
+            pass
+        
+        # Verificar EmergenciaRuta.solicitante (PROTECT)
+        try:
+            from apps.emergencies.models import EmergenciaRuta
+            count = EmergenciaRuta.objects.filter(solicitante=instance).count()
+            if count > 0:
+                relaciones_protegidas.append(f"{count} emergencia(s) solicitada(s)")
+        except Exception:
+            pass
+        
+        # Si hay relaciones protegidas, retornar error claro
+        if relaciones_protegidas:
+            from rest_framework.exceptions import ValidationError
+            mensaje = f"No se puede eliminar el usuario porque tiene relaciones protegidas: {', '.join(relaciones_protegidas)}. "
+            mensaje += "Primero debe eliminar o modificar estas relaciones."
+            raise ValidationError({"detail": mensaje})
+        
+        # Limpiar relaciones SET_NULL (si existen)
+        try:
+            # SolicitudRepuesto.aprobador y entregador (SET_NULL)
+            from apps.inventory.models import SolicitudRepuesto
+            SolicitudRepuesto.objects.filter(aprobador=instance).update(aprobador=None)
+            SolicitudRepuesto.objects.filter(entregador=instance).update(entregador=None)
+        except Exception:
+            pass
+        
+        # Intentar eliminar el usuario
         # Django automáticamente eliminará:
         # - Profile (OneToOne con CASCADE)
         # - PasswordResetToken (ForeignKey con CASCADE)
-        instance.delete()
+        try:
+            instance.delete()
+        except Exception as e:
+            # Capturar cualquier otro error (incluyendo ProtectedError de Django)
+            from django.db.models.deletion import ProtectedError
+            if isinstance(e, ProtectedError):
+                # ProtectedError tiene información sobre los objetos relacionados
+                objetos_protegidos = []
+                for obj in e.protected_objects:
+                    objetos_protegidos.append(f"{obj._meta.verbose_name} (ID: {obj.pk})")
+                
+                from rest_framework.exceptions import ValidationError
+                mensaje = f"No se puede eliminar el usuario porque está relacionado con: {', '.join(objetos_protegidos[:5])}"
+                if len(objetos_protegidos) > 5:
+                    mensaje += f" y {len(objetos_protegidos) - 5} más."
+                mensaje += " Primero debe eliminar o modificar estas relaciones."
+                raise ValidationError({"detail": mensaje})
+            else:
+                # Otro tipo de error
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError({"detail": f"Error al eliminar el usuario: {str(e)}"})
 
     @action(detail=False, methods=['get', 'put', 'patch'], permission_classes=[permissions.IsAuthenticated])
     def me(self, request, *args, **kwargs):
@@ -264,6 +391,7 @@ class MeAPIView(APIView):
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework import serializers, status
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
 
@@ -315,83 +443,117 @@ class LoginView(APIView):
         - 400: Credenciales inválidas o usuario inactivo
         - 401: Error de autenticación
         """
-        # Validar datos de entrada
-        serializer = LoginSerializer(data=request.data, context={'request': request})
-        serializer.is_valid(raise_exception=True)
-        
-        # Obtener usuario validado del serializer
-        # LoginSerializer.validate() ya verificó credenciales y que esté activo
-        user = serializer.validated_data["user"]
-        
-        # Logging para debugging (solo en desarrollo)
-        import logging
-        logger = logging.getLogger(__name__)
-        if settings.DEBUG:
-            logger.info(f"Login exitoso para usuario: {user.username}, rol: {user.rol}, activo: {user.is_active}")
-
-        # Generar tokens JWT
-        # RefreshToken.for_user() crea un par de tokens (refresh + access)
-        refresh = RefreshToken.for_user(user)
-        access = refresh.access_token  # Token de acceso (corto plazo)
-
-        # Registrar auditoría de acceso exitoso
-        # Esto permite rastrear quién y cuándo accedió al sistema
-        from apps.workorders.models import Auditoria
-        from django.utils import timezone
         try:
-            Auditoria.objects.create(
-                usuario=user,
-                accion="LOGIN_EXITOSO",
-                objeto_tipo="User",
-                objeto_id=str(user.id),
-                payload={
-                    "ip": self.get_client_ip(request),  # IP del cliente
-                    "user_agent": request.META.get('HTTP_USER_AGENT', ''),  # Navegador
-                    "timestamp": timezone.now().isoformat(),  # Fecha/hora
-                    "rol": user.rol  # Agregar rol para debugging
-                }
+            # Validar datos de entrada
+            serializer = LoginSerializer(data=request.data, context={'request': request})
+            serializer.is_valid(raise_exception=True)
+            
+            # Obtener usuario validado del serializer
+            # LoginSerializer.validate() ya verificó credenciales y que esté activo
+            user = serializer.validated_data["user"]
+        except serializers.ValidationError as e:
+            # Si es un error de validación (credenciales incorrectas), retornarlo directamente
+            error_message = "Credenciales incorrectas"
+            if hasattr(e, 'detail'):
+                if isinstance(e.detail, list) and len(e.detail) > 0:
+                    error_message = str(e.detail[0])
+                elif isinstance(e.detail, dict):
+                    error_message = str(e.detail.get('non_field_errors', [error_message])[0])
+                else:
+                    error_message = str(e.detail)
+            return Response(
+                {"detail": error_message},
+                status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
-            # Si falla la auditoría, no bloquear el login
-            # Solo loguear el error para debugging
+            # Capturar cualquier otro error y retornar un mensaje claro
             import logging
             logger = logging.getLogger(__name__)
-            logger.warning(f"Error al registrar auditoría de login: {e}")
+            logger.error(f"Error en login: {str(e)}", exc_info=True)
+            return Response(
+                {"detail": "Error al procesar el login. Por favor intenta nuevamente."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        try:
+            # Logging para debugging (solo en desarrollo)
+            import logging
+            logger = logging.getLogger(__name__)
+            if settings.DEBUG:
+                logger.info(f"Login exitoso para usuario: {user.username}, rol: {user.rol}, activo: {user.is_active}")
 
-        # Preparar respuesta con datos del usuario y tokens
-        res = Response({
-            "user": UserSerializer(user).data,  # Datos del usuario serializados
-            "access": str(access),              # Token de acceso (también en cookie)
-            "refresh": str(refresh),            # Token de refresh (también en cookie)
-        })
+            # Generar tokens JWT
+            # RefreshToken.for_user() crea un par de tokens (refresh + access)
+            refresh = RefreshToken.for_user(user)
+            access = refresh.access_token  # Token de acceso (corto plazo)
 
-        # Configurar cookies con los tokens
-        # secure: True solo en producción (HTTPS), False en desarrollo (HTTP)
-        secure = not settings.DEBUG
+            # Registrar auditoría de acceso exitoso
+            # Esto permite rastrear quién y cuándo accedió al sistema
+            from apps.workorders.models import Auditoria
+            from django.utils import timezone
+            try:
+                Auditoria.objects.create(
+                    usuario=user,
+                    accion="LOGIN_EXITOSO",
+                    objeto_tipo="User",
+                    objeto_id=str(user.id),
+                    payload={
+                        "ip": self.get_client_ip(request),  # IP del cliente
+                        "user_agent": request.META.get('HTTP_USER_AGENT', ''),  # Navegador
+                        "timestamp": timezone.now().isoformat(),  # Fecha/hora
+                        "rol": user.rol  # Agregar rol para debugging
+                    }
+                )
+            except Exception as e:
+                # Si falla la auditoría, no bloquear el login
+                # Solo loguear el error para debugging
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Error al registrar auditoría de login: {e}")
 
-        # Cookie con token de acceso
-        res.set_cookie(
-            "pgf_access",
-            str(access),
-            httponly=True,      # No accesible desde JavaScript (protección XSS)
-            samesite="Lax",     # Protección CSRF
-            secure=secure,      # Solo enviar por HTTPS en producción
-            path="/",           # Disponible en todo el sitio
-            max_age=3600,       # Expira en 1 hora (3600 segundos)
-        )
+            # Preparar respuesta con datos del usuario y tokens
+            res = Response({
+                "user": UserSerializer(user).data,  # Datos del usuario serializados
+                "access": str(access),              # Token de acceso (también en cookie)
+                "refresh": str(refresh),            # Token de refresh (también en cookie)
+            })
 
-        # Cookie con token de refresh
-        res.set_cookie(
-            "pgf_refresh",
-            str(refresh),
-            httponly=True,
-            samesite="Lax",
-            secure=secure,
-            path="/",
-            max_age=3600 * 24 * 7,  # Expira en 7 días
-        )
+            # Configurar cookies con los tokens
+            # secure: True solo en producción (HTTPS), False en desarrollo (HTTP)
+            secure = not settings.DEBUG
 
-        return res
+            # Cookie con token de acceso
+            res.set_cookie(
+                "pgf_access",
+                str(access),
+                httponly=True,      # No accesible desde JavaScript (protección XSS)
+                samesite="Lax",     # Protección CSRF
+                secure=secure,      # Solo enviar por HTTPS en producción
+                path="/",           # Disponible en todo el sitio
+                max_age=3600,       # Expira en 1 hora (3600 segundos)
+            )
+
+            # Cookie con token de refresh
+            res.set_cookie(
+                "pgf_refresh",
+                str(refresh),
+                httponly=True,
+                samesite="Lax",
+                secure=secure,
+                path="/",
+                max_age=3600 * 24 * 7,  # Expira en 7 días
+            )
+
+            return res
+        except Exception as e:
+            # Capturar errores en la generación de tokens o cookies
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error generando tokens o cookies: {str(e)}", exc_info=True)
+            return Response(
+                {"detail": "Error al generar tokens de autenticación. Por favor intenta nuevamente."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
     def get_client_ip(self, request):
         """

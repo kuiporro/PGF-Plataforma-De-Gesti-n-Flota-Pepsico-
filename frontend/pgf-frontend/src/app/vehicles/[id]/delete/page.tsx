@@ -1,18 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { useToast } from "@/components/ToastContainer";
 import ConfirmDialog from "@/components/ConfirmDialog";
 
-export default function DeleteVehicle({ params }: any) {
-  const id = params.id;
+export default function DeleteVehicle() {
+  const params = useParams();
+  const id = params?.id as string | undefined;
   const router = useRouter();
   const toast = useToast();
   const [showConfirm, setShowConfirm] = useState(true);
   const [loading, setLoading] = useState(false);
 
   const remove = async () => {
+    if (!id) {
+      toast.error("ID de vehículo no válido");
+      return;
+    }
+
     setLoading(true);
     try {
       const r = await fetch(`/api/proxy/vehicles/${id}/`, {

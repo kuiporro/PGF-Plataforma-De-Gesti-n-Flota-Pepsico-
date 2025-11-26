@@ -156,7 +156,7 @@ class ChoferViewSet(viewsets.ModelViewSet):
                 }
             )
     
-    @action(detail=True, methods=["post"])
+    @action(detail=True, methods=["post"], url_path="asignar-vehiculo")
     def asignar_vehiculo(self, request, pk=None):
         """
         Asigna un vehículo a un chofer.
@@ -184,45 +184,65 @@ class ChoferViewSet(viewsets.ModelViewSet):
         - 400: Si falta vehiculo_id
         - 404: Si el vehículo no existe
         """
-        chofer = self.get_object()
-        vehiculo_id = request.data.get("vehiculo_id")
-        
-        if not vehiculo_id:
-            return Response(
-                {"detail": "Se requiere vehiculo_id"},
-                status=400
-            )
-        
-        # Buscar vehículo
-        from apps.vehicles.models import Vehiculo
         try:
-            vehiculo = Vehiculo.objects.get(id=vehiculo_id)
-        except Vehiculo.DoesNotExist:
-            return Response(
-                {"detail": "Vehículo no encontrado"},
-                status=404
-            )
-        
-        # Finalizar asignación anterior si existe
-        if chofer.vehiculo_asignado:
-            HistorialAsignacionVehiculo.objects.filter(
+            chofer = self.get_object()
+            vehiculo_id = request.data.get("vehiculo_id")
+            
+            if not vehiculo_id:
+                return Response(
+                    {"detail": "Se requiere vehiculo_id"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Buscar vehículo
+            from apps.vehicles.models import Vehiculo
+            try:
+                vehiculo = Vehiculo.objects.get(id=vehiculo_id)
+            except Vehiculo.DoesNotExist:
+                return Response(
+                    {"detail": "Vehículo no encontrado"},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            except Exception as e:
+                return Response(
+                    {"detail": f"Error al buscar vehículo: {str(e)}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Finalizar asignación anterior si existe
+            if chofer.vehiculo_asignado:
+                HistorialAsignacionVehiculo.objects.filter(
+                    chofer=chofer,
+                    vehiculo=chofer.vehiculo_asignado,
+                    activa=True
+                ).update(activa=False, motivo_fin="Reasignación")
+            
+            # Asignar nuevo vehículo
+            chofer.vehiculo_asignado = vehiculo
+            chofer.save()
+            
+            # Crear registro en historial
+            HistorialAsignacionVehiculo.objects.create(
                 chofer=chofer,
-                vehiculo=chofer.vehiculo_asignado,
+                vehiculo=vehiculo,
                 activa=True
-            ).update(activa=False, motivo_fin="Reasignación")
-        
-        # Asignar nuevo vehículo
-        chofer.vehiculo_asignado = vehiculo
-        chofer.save()
-        
-        # Crear registro en historial
-        HistorialAsignacionVehiculo.objects.create(
-            chofer=chofer,
-            vehiculo=vehiculo,
-            activa=True
-        )
-        
-        return Response(ChoferSerializer(chofer).data)
+            )
+            
+            # Serializar y retornar
+            serializer = ChoferSerializer(chofer)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            # Capturar cualquier error inesperado y retornar JSON
+            import traceback
+            error_detail = str(e)
+            if hasattr(e, '__traceback__'):
+                error_detail = f"{str(e)}\n{traceback.format_exc()}"
+            
+            return Response(
+                {"detail": f"Error al asignar vehículo: {error_detail}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
     def perform_update(self, serializer):
         """

@@ -42,10 +42,30 @@ export default function Topbar() {
     }
   }
 
+  // Función para obtener el título según el rol
+  const getPanelTitle = (rol: string | undefined): string => {
+    if (!rol) return "PGF - Plataforma de Gestión de Flota";
+    
+    const titles: Record<string, string> = {
+      ADMIN: "Panel de Administración",
+      SUPERVISOR: "Panel de Supervisor",
+      JEFE_TALLER: "Panel del Taller",
+      MECANICO: "Panel del Mecánico",
+      GUARDIA: "Panel de Guardia",
+      RECEPCIONISTA: "Panel de Recepción",
+      COORDINADOR_ZONA: "Panel de Coordinación",
+      EJECUTIVO: "Panel Ejecutivo",
+      SPONSOR: "Panel de Sponsor",
+      CHOFER: "Panel del Chofer",
+    };
+    
+    return titles[rol] || "PGF - Plataforma de Gestión de Flota";
+  };
+
   return (
     <header className="h-16 bg-white dark:bg-gray-800 shadow-lg flex items-center justify-between px-6 border-b-2 border-[#003DA5]/20 dark:border-[#003DA5]/30">
       <h1 className="text-xl font-bold text-[#003DA5] dark:text-white">
-        Panel de Administración
+        {getPanelTitle(user?.rol)}
       </h1>
 
       <div className="flex items-center gap-4">

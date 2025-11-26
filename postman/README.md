@@ -15,13 +15,14 @@
 
 | Variable | Valor Inicial | Descripción |
 |----------|---------------|-------------|
-| `base_url` | `http://localhost:8000/api/v1` | URL base de la API |
+| `base_url` | `http://localhost:8000/api/v1` | URL base de la API. **Importante**: Si usas Docker, usa `http://localhost:8000/api/v1`. Si el backend está en otro puerto, ajusta el puerto. |
 | `frontend_url` | `http://localhost:3000` | URL del frontend |
 | `access_token` | (vacío) | Se llena automáticamente al hacer login |
 | `refresh_token` | (vacío) | Se llena automáticamente al hacer login |
 | `user_id` | (vacío) | Se llena automáticamente al hacer login |
 | `ot_id` | (vacío) | Se llena al crear una OT |
-| `vehicle_id` | (vacío) | Se llena al crear un vehículo |
+| `vehicle_id` | (vacío) | Se llena al crear un vehículo (UUID) |
+| `chofer_id` | (vacío) | Se llena al crear un chofer (UUID) |
 
 4. Selecciona este environment antes de ejecutar las requests
 
@@ -141,14 +142,41 @@
    - Verifica que aparece la evidencia creada
    - Verifica que muestra versiones si fue invalidada
 
-### Flujo 6: Generar Reportes
+### Flujo 6: Gestión de Choferes
+1. **Listar Choferes**
+   - Ejecuta "6. Choferes > Listar Choferes"
+   - Verifica que retorna lista paginada de choferes
+   - Verifica filtros por zona, activo, etc.
+
+2. **Crear Chofer**
+   - Ejecuta "6. Choferes > Crear Chofer"
+   - Body: `{"nombre_completo": "Juan Pérez", "rut": "123456789", "zona": "Zona Centro", ...}`
+   - Verifica que se crea correctamente y se guarda `chofer_id`
+   - Verifica que se crea un usuario asociado con rol CHOFER
+
+3. **Obtener Chofer**
+   - Ejecuta "6. Choferes > Obtener Chofer por ID"
+   - Usa el `chofer_id` guardado
+   - Verifica que retorna todos los datos del chofer
+
+4. **Asignar Vehículo a Chofer**
+   - Ejecuta "6. Choferes > Asignar Vehículo a Chofer"
+   - Body: `{"vehiculo_id": "{{vehicle_id}}"}`
+   - Verifica que se asigna correctamente
+   - Verifica que se crea registro en historial
+
+5. **Historial de Asignaciones**
+   - Ejecuta "6. Choferes > Historial de Asignaciones"
+   - Verifica que retorna historial completo del chofer
+
+### Flujo 7: Generar Reportes
 
 1. **Dashboard Ejecutivo**
-   - Ejecuta "6. Reportes > Dashboard Ejecutivo"
+   - Ejecuta "7. Reportes > Dashboard Ejecutivo"
    - Verifica que retorna KPIs y datos
 
 2. **Generar PDF**
-   - Ejecuta "6. Reportes > Generar PDF Diario"
+   - Ejecuta "7. Reportes > Generar PDF Diario"
    - Verifica que descarga un PDF válido
    - Cambia `tipo` a "semanal" o "mensual" para otros reportes
 
@@ -203,29 +231,82 @@ newman run postman/PGF_API_Collection.json \
       --reporter-junit-export test-results/postman-junit.xml
 ```
 
-## 📝 Endpoints Nuevos (v2.1.0)
+## 📝 Endpoints Disponibles
+
+### Autenticación
+- `POST /api/v1/auth/login/` - Login con username/password
+- `POST /api/v1/auth/refresh/` - Refrescar token de acceso
+- `GET /api/v1/auth/me/` - Obtener usuario actual
+
+### Usuarios
+- `GET /api/v1/users/` - Listar usuarios (requiere ADMIN/SUPERVISOR)
+- `POST /api/v1/users/` - Crear usuario (público)
+- `GET /api/v1/users/{id}/` - Obtener usuario por ID
+- `PUT/PATCH /api/v1/users/{id}/` - Actualizar usuario
+- `DELETE /api/v1/users/{id}/` - Eliminar usuario (no permite eliminar permanentes)
 
 ### Vehículos
+- `GET /api/v1/vehicles/` - Listar vehículos
+- `POST /api/v1/vehicles/` - Crear vehículo
 - `POST /api/v1/vehicles/ingreso/` - Registrar ingreso de vehículo
 - `POST /api/v1/vehicles/salida/` - Registrar salida de vehículo
 - `GET /api/v1/vehicles/ingresos-hoy/` - Listar ingresos del día
 - `GET /api/v1/vehicles/ingreso/{ingreso_id}/ticket/` - Generar ticket PDF
-- `GET /api/v1/vehicles/bloqueos/` - Listar bloqueos de vehículos
-- `POST /api/v1/vehicles/bloqueos/` - Crear bloqueo de vehículo
-- `POST /api/v1/vehicles/bloqueos/{id}/resolver/` - Resolver bloqueo
+
+### Choferes (Drivers)
+- `GET /api/v1/drivers/choferes/` - Listar choferes
+- `POST /api/v1/drivers/choferes/` - Crear chofer
+- `GET /api/v1/drivers/choferes/{id}/` - Obtener chofer por ID
+- `PUT/PATCH /api/v1/drivers/choferes/{id}/` - Actualizar chofer
+- `DELETE /api/v1/drivers/choferes/{id}/` - Eliminar chofer
+- `POST /api/v1/drivers/choferes/{id}/asignar-vehiculo/` - Asignar vehículo a chofer
+- `GET /api/v1/drivers/choferes/{id}/historial/` - Historial de asignaciones
+- `GET /api/v1/drivers/historial/` - Listar todo el historial de asignaciones
 
 ### Órdenes de Trabajo
+- `GET /api/v1/work/ordenes/` - Listar órdenes de trabajo
+- `POST /api/v1/work/ordenes/` - Crear orden de trabajo
+- `GET /api/v1/work/ordenes/{ot_id}/` - Obtener OT por ID
 - `GET /api/v1/work/ordenes/{ot_id}/timeline/` - Timeline consolidado de OT
 - `GET /api/v1/work/comentarios/?ot={ot_id}` - Listar comentarios de OT
 - `POST /api/v1/work/comentarios/` - Crear comentario en OT
+
+### Evidencias
+- `POST /api/v1/work/evidencias/presigned/` - Obtener presigned URL para subir
+- `GET /api/v1/work/evidencias/?ot={ot_id}` - Listar evidencias
+- `POST /api/v1/work/evidencias/` - Crear evidencia
 - `POST /api/v1/work/evidencias/{id}/invalidar/` - Invalidar evidencia
-- `GET /api/v1/work/evidencias/{id}/` - Ver evidencia con versiones
+
+### Reportes
+- `GET /api/v1/reports/dashboard-ejecutivo/` - Dashboard ejecutivo
+- `GET /api/v1/reports/pdf/` - Generar PDF de reportes
+
+## ⚙️ Configuración de URL Base
+
+### Para Desarrollo Local (sin Docker)
+```
+base_url = http://localhost:8000/api/v1
+```
+
+### Para Docker
+```
+base_url = http://localhost:8000/api/v1
+```
+(Desde el host, el puerto 8000 está mapeado al contenedor)
+
+### Para Producción
+```
+base_url = https://api.tudominio.com/api/v1
+```
+
+**Importante**: La variable `base_url` debe incluir `/api/v1` al final. Todos los endpoints se construyen como `{{base_url}}/endpoint/`.
 
 ## 📝 Notas
 
 - Los tokens JWT expiran en 1 hora por defecto
-- Algunos endpoints requieren roles específicos
+- Algunos endpoints requieren roles específicos (ADMIN, SUPERVISOR, etc.)
 - Las variables se actualizan automáticamente con scripts de test
 - Para pruebas de carga, usa Postman Runner con múltiples iteraciones
-- **Nuevos endpoints**: Ingreso/salida vehículos, timeline, comentarios, invalidación de evidencias
+- **Credenciales por defecto**: admin / admin123 (usuario permanente)
+- Los usuarios permanentes no se pueden eliminar, solo editar y ver
 

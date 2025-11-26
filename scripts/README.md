@@ -47,6 +47,33 @@ test-results/
 
 ## Otros Scripts
 
+### `dump_schema_simple.sh`
+Script para generar dump del esquema SQL desde PostgreSQL.
+
+**Uso:**
+```bash
+# Generar dump con nombre por defecto (docs/ESQUEMA_SQL_FROM_DB.sql)
+./scripts/dump_schema_simple.sh
+
+# Especificar archivo de salida
+./scripts/dump_schema_simple.sh docs/mi_esquema.sql
+```
+
+**Características:**
+- Lee configuración desde `.env` o variables de entorno
+- Detecta automáticamente si la BD está en Docker
+- Genera solo el esquema (sin datos)
+- Listo para usar en dbdiagram.io
+
+**Si la BD está en Docker:**
+```bash
+# Alternativa usando Docker directamente
+docker exec pgf-db pg_dump -U pgf -d pgf -s --no-owner --no-privileges > docs/ESQUEMA_SQL_FROM_DB.sql
+```
+
+### `dump_schema.py`
+Versión Python que usa Django settings (requiere entorno Django configurado).
+
 ### `run_tests.sh` (Linux/Mac)
 Script bash para ejecutar pruebas con opciones.
 

@@ -90,15 +90,26 @@ export default function AsignacionVehiculosPage() {
       });
 
       const text = await response.text();
+      
+      // Detectar si la respuesta es HTML (error del servidor)
+      if (text.trim().startsWith("<!DOCTYPE") || text.trim().startsWith("<html")) {
+        console.error("Backend retornó HTML en lugar de JSON:", text.substring(0, 200));
+        toast.error("Error del servidor. Por favor intenta nuevamente.");
+        return;
+      }
+      
       let data;
       try {
         data = JSON.parse(text);
-      } catch {
-        data = { detail: text || "Error desconocido" };
+      } catch (e) {
+        console.error("Error parseando JSON:", e, "Response:", text.substring(0, 200));
+        toast.error("Error procesando respuesta del servidor");
+        return;
       }
 
       if (!response.ok) {
-        toast.error(data.detail || "Error al asignar vehículo");
+        const errorMessage = data.detail || data.message || "Error al asignar vehículo";
+        toast.error(errorMessage);
         return;
       }
 

@@ -87,12 +87,19 @@ export default function UserDetail() {
             >
               Editar
             </Link>
-            <Link
-              href={`/users/${user.id}/delete`}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors font-medium"
-            >
-              Eliminar
-            </Link>
+            {!user.is_permanent && (
+              <Link
+                href={`/users/${user.id}/delete`}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors font-medium"
+              >
+                Eliminar
+              </Link>
+            )}
+            {user.is_permanent && (
+              <span className="px-4 py-2 bg-gray-400 text-white rounded-lg cursor-not-allowed font-medium" title="Este usuario es permanente y no se puede eliminar">
+                Eliminar (Permanente)
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -161,6 +168,17 @@ export default function UserDetail() {
               {user.is_active ? "Activo" : "Inactivo"}
             </span>
           </div>
+
+          {user.is_permanent && (
+            <div>
+              <label className="block text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
+                Tipo de Usuario
+              </label>
+              <span className="inline-block px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-400 rounded text-sm font-medium">
+                Usuario Permanente
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">

@@ -27,6 +27,11 @@ class UserPermission(BasePermission):
             # Solo el propio admin puede ver/editar el usuario admin
             return request.user.rol == "ADMIN" and request.user.username == "admin"
 
+        # Prevenir eliminación de usuarios permanentes
+        # Los usuarios permanentes solo se pueden ver y editar, nunca eliminar
+        if view.action == 'destroy' and obj.is_permanent:
+            return False
+
         # Si no es el usuario admin, aplicar permisos normales
         if request.user.rol in ["ADMIN", "SUPERVISOR", "JEFE_TALLER"]:
             return True

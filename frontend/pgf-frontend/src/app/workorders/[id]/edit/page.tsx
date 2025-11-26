@@ -107,13 +107,21 @@ export default function EditWorkOrder() {
     setErrors({});
 
     try {
+      // Validar que el vehículo esté seleccionado
+      if (!form.vehiculo || form.vehiculo === "" || form.vehiculo === "0") {
+        setErrors({ vehiculo: "El vehículo es obligatorio" });
+        toast.error("Por favor selecciona un vehículo");
+        setSaving(false);
+        return;
+      }
+
       const r = await fetch(`/api/proxy/work/ordenes/${id}/`, {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
-          vehiculo: Number(form.vehiculo),
+          vehiculo: form.vehiculo, // Mantener como string (UUID)
           items,
         }),
       });

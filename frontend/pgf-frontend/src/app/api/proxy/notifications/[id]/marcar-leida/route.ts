@@ -3,9 +3,9 @@ import { proxyFetch } from "../../../utils";
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  return proxyFetch(`/notifications/${params.id}/marcar-leida/`, {
+  return proxyFetch(`/notifications/${id}/marcar-leida/`, {
     method: "POST",
   });
 }

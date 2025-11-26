@@ -78,6 +78,13 @@ class User(AbstractUser):
         help_text="RUT sin puntos ni guión (ej: 123456789)"
     )
     
+    # Usuario permanente: no se puede eliminar, solo editar y ver
+    # Útil para super usuarios del sistema que deben estar siempre disponibles
+    is_permanent = models.BooleanField(
+        default=False,
+        help_text="Si está marcado, este usuario no se puede eliminar, solo editar y ver"
+    )
+    
     # REQUIRED_FIELDS: le dice a Django que el email es obligatorio al crear superusuario
     # Además de username (que ya es requerido por AbstractUser)
     REQUIRED_FIELDS = ['email']

@@ -18,9 +18,10 @@
   --pepsico-orange: #FF6B35;
   --pepsico-green: #00A859;
 
-  /* Colores principales */
+  /* Colores principales - Mejorado contraste */
   --color-bg: #f5f7fa;
-  --color-text: #1f2937;
+  --color-text: #111827; /* Más oscuro para mejor legibilidad */
+  --color-text-secondary: #374151; /* Texto secundario más oscuro */
   --color-card: #ffffff;
 
   --color-primary: var(--pepsico-blue);
@@ -85,6 +86,11 @@ html, body {
   border: 1px solid var(--color-border);
   @apply p-6;
   transition: all 0.3s ease;
+  color: var(--color-text); /* Texto más oscuro en cards */
+}
+
+.dark .card {
+  color: #f3f4f6; /* Texto claro en modo oscuro */
 }
 
 .card:hover {
@@ -97,7 +103,12 @@ html, body {
 }
 
 .card-title {
-  @apply text-xl font-bold text-gray-900 dark:text-white;
+  @apply text-xl font-bold;
+  color: var(--color-text); /* Título más oscuro */
+}
+
+.dark .card-title {
+  color: #ffffff; /* Título blanco en modo oscuro */
 }
 
 /* ============================================================
@@ -108,7 +119,13 @@ html, body {
 .h2 { @apply text-2xl font-semibold mb-3; }
 .h3 { @apply text-xl font-semibold mb-2; }
 
-.text-muted { @apply text-gray-500; }
+.text-muted { 
+  color: var(--color-text-secondary); /* Texto secundario más oscuro */
+}
+
+.dark .text-muted {
+  color: #d1d5db; /* Texto secundario más claro en modo oscuro */
+}
 
 /* ============================================================
    🔷 TABLAS PROFESIONALES
@@ -192,6 +209,38 @@ html, body {
   border-color: var(--color-border);
   transition: all 0.3s ease;
   font-size: 0.95rem;
+  color: #000000 !important; /* Texto negro en inputs para máxima legibilidad */
+}
+
+.input::placeholder {
+  color: #6b7280 !important; /* Placeholder gris medio para mejor visibilidad */
+}
+
+/* Select también debe tener texto negro */
+select.input {
+  color: #000000 !important;
+}
+
+select.input option {
+  color: #000000;
+  background: #ffffff;
+}
+
+.dark .input {
+  color: #f3f4f6 !important; /* Texto claro en modo oscuro */
+}
+
+.dark .input::placeholder {
+  color: #9ca3af !important; /* Placeholder más claro en modo oscuro */
+}
+
+.dark select.input {
+  color: #f3f4f6 !important;
+}
+
+.dark select.input option {
+  color: #f3f4f6;
+  background: #374151;
 }
 
 .input:focus {
@@ -206,6 +255,11 @@ html, body {
 
 .label {
   @apply text-sm font-semibold mb-1 block;
+  color: var(--color-text); /* Texto más oscuro para mejor legibilidad */
+}
+
+.label.text-muted {
+  color: var(--color-text-secondary);
 }
 
 textarea.input {
@@ -215,6 +269,54 @@ textarea.input {
 /* Select */
 select.input {
   @apply appearance-none bg-white;
+  color: #000000 !important; /* Texto negro en selects */
+}
+
+select.input option {
+  color: #000000;
+  background: #ffffff;
+}
+
+/* Asegurar que todos los inputs tengan texto negro en modo claro */
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="password"],
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+textarea,
+select {
+  color: #000000 !important; /* Texto negro por defecto */
+}
+
+input[type="text"]::placeholder,
+input[type="number"]::placeholder,
+input[type="email"]::placeholder,
+input[type="password"]::placeholder,
+textarea::placeholder {
+  color: #6b7280 !important; /* Placeholder gris medio */
+}
+
+/* En modo oscuro, texto claro */
+.dark input[type="text"],
+.dark input[type="number"],
+.dark input[type="email"],
+.dark input[type="password"],
+.dark input[type="date"],
+.dark input[type="time"],
+.dark input[type="datetime-local"],
+.dark textarea,
+.dark select {
+  color: #f3f4f6 !important; /* Texto claro en modo oscuro */
+}
+
+.dark input[type="text"]::placeholder,
+.dark input[type="number"]::placeholder,
+.dark input[type="email"]::placeholder,
+.dark input[type="password"]::placeholder,
+.dark textarea::placeholder {
+  color: #9ca3af !important; /* Placeholder más claro en modo oscuro */
 }
 
 /* ============================================================
@@ -225,6 +327,24 @@ select.input {
   @apply bg-white dark:bg-gray-800 shadow-lg rounded-xl p-6 mb-6;
   border: 1px solid var(--color-border);
   transition: all 0.3s ease;
+  color: var(--color-text); /* Texto más oscuro en secciones */
+}
+
+.section h2,
+.section h3,
+.section h4 {
+  color: var(--color-text); /* Títulos más oscuros */
+  font-weight: 600;
+}
+
+.dark .section {
+  color: #f3f4f6; /* Texto claro en modo oscuro */
+}
+
+.dark .section h2,
+.dark .section h3,
+.dark .section h4 {
+  color: #ffffff; /* Títulos blancos en modo oscuro */
 }
 
 .section:hover {
@@ -379,7 +499,7 @@ tbody tr:hover {
 @tailwind utilities;
 
 /* --------------------------
-   GENERAL
+   GENERAL - MEJORADO CONTRASTE
 --------------------------- */
 html {
   scroll-behavior: smooth;
@@ -387,6 +507,46 @@ html {
 
 body {
   font-family: "Inter", sans-serif;
+  color: var(--color-text); /* Texto más oscuro por defecto */
+}
+
+/* Mejorar contraste de todos los textos */
+p, span, div, label, h1, h2, h3, h4, h5, h6 {
+  color: inherit; /* Hereda el color del contenedor */
+}
+
+/* Textos en modo claro - más oscuros */
+:not(.dark) p,
+:not(.dark) span:not(.text-muted),
+:not(.dark) div:not(.text-muted),
+:not(.dark) label {
+  color: #111827; /* Texto muy oscuro para mejor legibilidad */
+}
+
+:not(.dark) h1,
+:not(.dark) h2,
+:not(.dark) h3,
+:not(.dark) h4,
+:not(.dark) h5,
+:not(.dark) h6 {
+  color: #111827; /* Títulos muy oscuros */
+}
+
+/* Textos en modo oscuro - más claros */
+.dark p,
+.dark span:not(.text-muted),
+.dark div:not(.text-muted),
+.dark label {
+  color: #f3f4f6; /* Texto muy claro en modo oscuro */
+}
+
+.dark h1,
+.dark h2,
+.dark h3,
+.dark h4,
+.dark h5,
+.dark h6 {
+  color: #ffffff; /* Títulos blancos en modo oscuro */
 }
 
 /* --------------------------

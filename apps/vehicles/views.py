@@ -161,10 +161,10 @@ class VehiculoViewSet(viewsets.ModelViewSet):
         - Si hay una Agenda programada para hoy, se vincula con la OT
         - La OT se crea automáticamente con estado ABIERTA
         """
-        # Verificar permisos: GUARDIA, ADMIN pueden registrar ingresos
-        if request.user.rol not in ["GUARDIA", "ADMIN"]:
+        # Verificar permisos: Solo GUARDIA puede registrar ingresos
+        if request.user.rol != "GUARDIA":
             return Response(
-                {"detail": "Solo el Guardia o Admin pueden registrar ingresos."},
+                {"detail": "Solo el Guardia puede registrar ingresos."},
                 status=status.HTTP_403_FORBIDDEN
             )
 
@@ -353,11 +353,14 @@ class VehiculoViewSet(viewsets.ModelViewSet):
             )
             response['Content-Disposition'] = f'inline; filename="ticket_ingreso_{str(ingreso_id)[:8]}.pdf"'
             return response
-        except IngresoVehiculo.DoesNotExist:
-            return Response(
-                {"detail": "Ingreso no encontrado."},
-                status=status.HTTP_404_NOT_FOUND
-            )
+        except (IngresoVehiculo.DoesNotExist, ValueError) as e:
+            # ValueError se lanza cuando generar_ticket_ingreso_pdf no encuentra el ingreso
+            if "no encontrado" in str(e).lower() or isinstance(e, IngresoVehiculo.DoesNotExist):
+                return Response(
+                    {"detail": "Ingreso no encontrado."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            raise
         except Exception as e:
             import logging
             logger = logging.getLogger(__name__)

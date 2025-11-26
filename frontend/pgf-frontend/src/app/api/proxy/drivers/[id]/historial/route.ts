@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { proxyFetch } from "../../../../utils";
+import { proxyFetch } from "../../../utils";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  return proxyFetch(`/drivers/choferes/${params.id}/historial/`, {
+  const { id } = await params;
+  return proxyFetch(`/drivers/choferes/${id}/historial/`, {
     method: "GET",
   });
 }

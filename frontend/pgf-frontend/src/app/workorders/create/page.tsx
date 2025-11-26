@@ -86,13 +86,21 @@ export default function CreateWorkOrder() {
     setErrors({});
 
     try {
+      // Validar que el vehículo esté seleccionado
+      if (!form.vehiculo || form.vehiculo === "" || form.vehiculo === "0") {
+        setErrors({ vehiculo: "El vehículo es obligatorio" });
+        toast.error("Por favor selecciona un vehículo");
+        setLoading(false);
+        return;
+      }
+
       const r = await fetch("/api/work/ordenes/create", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
-          vehiculo: Number(form.vehiculo),
+          vehiculo: form.vehiculo, // Mantener como string (UUID)
           items,
         }),
       });
@@ -130,7 +138,7 @@ export default function CreateWorkOrder() {
     <RoleGuard allow={["JEFE_TALLER", "ADMIN", "GUARDIA"]}>
       <div className="p-8 space-y-12 max-w-3xl mx-auto">
         <div className="mb-4">
-          <h1 className="text-3xl font-bold">Crear Orden de Trabajo</h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Crear Orden de Trabajo</h1>
           {hasRole(["GUARDIA"]) && (
             <div className="mt-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
               <p className="text-sm text-blue-800 dark:text-blue-300">
@@ -143,11 +151,11 @@ export default function CreateWorkOrder() {
         </div>
 
       {/* Datos principales */}
-      <section className="space-y-4 bg-white p-6 rounded shadow">
-        <h2 className="text-xl font-semibold">Datos principales</h2>
+      <section className="space-y-4 bg-white dark:bg-gray-800 p-6 rounded shadow border border-gray-200 dark:border-gray-700">
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Datos principales</h2>
 
         <div>
-          <label className="block mb-1 font-medium">Vehículo *</label>
+          <label className="block mb-1 font-medium text-gray-900 dark:text-gray-100">Vehículo *</label>
           <select
             className={`input ${errors.vehiculo ? "border-red-500" : ""}`}
             value={form.vehiculo}
@@ -171,7 +179,7 @@ export default function CreateWorkOrder() {
         </div>
 
         <div>
-          <label className="block mb-1">Tipo</label>
+          <label className="block mb-1 text-gray-900 dark:text-gray-100 font-medium">Tipo</label>
           <select
             className="input"
             value={form.tipo}
@@ -184,7 +192,7 @@ export default function CreateWorkOrder() {
         </div>
 
         <div>
-          <label className="block mb-1">Prioridad</label>
+          <label className="block mb-1 text-gray-900 dark:text-gray-100 font-medium">Prioridad</label>
           <select
             className="input"
             value={form.prioridad}
@@ -197,7 +205,7 @@ export default function CreateWorkOrder() {
         </div>
 
         <div>
-          <label className="block mb-1 font-medium">Motivo *</label>
+          <label className="block mb-1 font-medium text-gray-900 dark:text-gray-100">Motivo *</label>
           <textarea
             className={`input h-32 ${errors.motivo ? "border-red-500" : ""}`}
             value={form.motivo}
@@ -216,14 +224,14 @@ export default function CreateWorkOrder() {
       </section>
 
       {/* Items */}
-      <section className="space-y-4 bg-white p-6 rounded shadow">
-        <h2 className="text-xl font-semibold">Items</h2>
+      <section className="space-y-4 bg-white dark:bg-gray-800 p-6 rounded shadow border border-gray-200 dark:border-gray-700">
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Items</h2>
 
         {items.map((item, i) => (
           <div key={i} className="border p-4 rounded space-y-3">
             <div className="flex gap-4">
               <div className="flex-1">
-                <label className="block mb-1 text-sm font-medium">Tipo</label>
+                <label className="block mb-1 text-sm font-medium text-gray-900 dark:text-gray-100">Tipo</label>
                 <select
                   className="input"
                   value={item.tipo}
@@ -235,7 +243,7 @@ export default function CreateWorkOrder() {
               </div>
 
               <div className="flex-1">
-                <label className="block mb-1 text-sm font-medium">Cantidad *</label>
+                <label className="block mb-1 text-sm font-medium text-gray-900 dark:text-gray-100">Cantidad *</label>
                 <input
                   type="number"
                   min="1"
@@ -259,7 +267,7 @@ export default function CreateWorkOrder() {
               </div>
 
               <div className="flex-1">
-                <label className="block mb-1 text-sm font-medium">Costo unitario *</label>
+                <label className="block mb-1 text-sm font-medium text-gray-900 dark:text-gray-100">Costo unitario *</label>
                 <input
                   type="number"
                   min="0"
@@ -285,7 +293,7 @@ export default function CreateWorkOrder() {
             </div>
 
             <div>
-              <label className="block mb-1 text-sm font-medium">Descripción *</label>
+              <label className="block mb-1 text-sm font-medium text-gray-900 dark:text-gray-100">Descripción *</label>
               <input
                 className={`input w-full ${errors[`items.${i}.descripcion`] ? "border-red-500" : ""}`}
                 value={item.descripcion}

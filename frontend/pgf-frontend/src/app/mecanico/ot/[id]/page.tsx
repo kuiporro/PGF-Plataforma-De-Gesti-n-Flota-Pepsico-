@@ -190,8 +190,11 @@ export default function MecanicoOTPage() {
       // Intentar parsear como JSON
       let data: any = {};
       try {
-        if (text && text.trim()) {
+        if (text && text.trim() && text.trim() !== "{}") {
           data = JSON.parse(text);
+        } else if (text && text.trim() === "{}") {
+          // Si es un objeto vacío, puede ser una respuesta exitosa
+          data = {};
         }
       } catch (e) {
         // Si no es JSON válido, puede ser HTML (página de error) o texto plano
@@ -200,6 +203,20 @@ export default function MecanicoOTPage() {
           raw: text.substring(0, 200), // Primeros 200 caracteres para debugging
           parseError: String(e)
         };
+      }
+
+      // Si la respuesta es exitosa y tiene datos, actualizar
+      if (response.ok) {
+        if (data && (data.estado || Object.keys(data).length > 0)) {
+          toast.success("Estado actualizado correctamente");
+          await cargarDatos();
+          return;
+        } else if (Object.keys(data).length === 0) {
+          // Respuesta exitosa pero vacía, considerar éxito
+          toast.success("Estado actualizado correctamente");
+          await cargarDatos();
+          return;
+        }
       }
 
       if (!response.ok) {
@@ -263,13 +280,10 @@ export default function MecanicoOTPage() {
           responseHeaders: Object.fromEntries(response.headers.entries()),
           isEmpty: Object.keys(data).length === 0,
           responseType: response.headers.get("content-type"),
+          isOk: response.ok,
         });
         return;
       }
-
-      // Si llegamos aquí, la respuesta fue exitosa
-      toast.success("Estado actualizado correctamente");
-      await cargarDatos();
     } catch (error) {
       console.error("Error al cambiar estado:", error);
       toast.error("Error al cambiar estado");

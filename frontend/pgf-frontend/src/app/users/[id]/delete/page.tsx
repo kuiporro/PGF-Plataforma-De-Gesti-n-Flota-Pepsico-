@@ -24,13 +24,26 @@ export default function DeleteUser() {
 
       if (!r.ok) {
         const text = await r.text();
+        
+        // Detectar si la respuesta es HTML (error del servidor)
+        if (text.trim().startsWith("<!DOCTYPE") || text.trim().startsWith("<html")) {
+          console.error("Backend retornó HTML en lugar de JSON:", text.substring(0, 200));
+          toast.error("Error del servidor. El usuario no se puede eliminar porque tiene relaciones protegidas en el sistema.");
+          return;
+        }
+        
         let data;
         try {
           data = JSON.parse(text);
-        } catch {
-          data = { detail: text || "Error desconocido" };
+        } catch (e) {
+          console.error("Error parseando JSON:", e, "Response:", text.substring(0, 200));
+          toast.error("Error procesando respuesta del servidor");
+          return;
         }
-        toast.error(data.detail || "Error al eliminar el usuario");
+        
+        // Extraer mensaje de error
+        const errorMessage = data.detail || data.message || "Error al eliminar el usuario";
+        toast.error(errorMessage);
         return;
       }
 

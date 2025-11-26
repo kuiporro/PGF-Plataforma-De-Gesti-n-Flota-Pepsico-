@@ -138,23 +138,51 @@ if [ "$RUN_SECURITY" = true ]; then
   echo -e "${YELLOW}🔒 Ejecutando Escaneo de Seguridad (OWASP ZAP)${NC}"
   echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
   
-  # Verificar que el servidor esté corriendo
-  if ! curl -s -o /dev/null -w "%{http_code}" http://localhost:3000 | grep -q "200\|301\|302"; then
+  # Verificar que el servidor esté corriendo con múltiples intentos
+  echo "  → Verificando disponibilidad del servidor frontend..."
+  SERVER_AVAILABLE=false
+  for i in {1..5}; do
+    if curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://localhost:3000 2>/dev/null | grep -q "200\|301\|302\|404"; then
+      SERVER_AVAILABLE=true
+      break
+    fi
+    if [ $i -lt 5 ]; then
+      echo "     Intento $i/5 falló, reintentando en 3s..."
+      sleep 3
+    fi
+  done
+  
+  if [ "$SERVER_AVAILABLE" = false ]; then
     echo -e "${RED}❌ Error: El servidor frontend no está disponible en http://localhost:3000${NC}"
     echo "   Inicia el servidor con: docker compose up -d web"
+    echo "   Espera a que esté completamente iniciado antes de ejecutar el escaneo"
     SECURITY_FAILED=true
   else
-    echo "  → Ejecutando escaneo pasivo (baseline)..."
-    ./scripts/owasp_zap_scan.sh baseline || {
-      echo -e "${RED}❌ Escaneo de seguridad falló${NC}"
+    echo "  → Servidor disponible, ejecutando escaneo pasivo (baseline)..."
+    echo "  ⚠️  Nota: El escaneo puede tardar varios minutos"
+    
+    # Ejecutar escaneo con timeout extendido
+    timeout 600 ./scripts/owasp_zap_scan.sh baseline || {
+      EXIT_CODE=$?
+      if [ $EXIT_CODE -eq 124 ]; then
+        echo -e "${YELLOW}⚠️  Escaneo de seguridad excedió el tiempo límite (10 minutos)${NC}"
+        echo "   Esto puede ser normal para escaneos largos"
+      else
+        echo -e "${RED}❌ Escaneo de seguridad falló${NC}"
+        echo "   Revisa los logs en: $SECURITY_DIR/zap-baseline.log"
+      fi
       SECURITY_FAILED=true
     }
     
     if [ -z "$SECURITY_FAILED" ]; then
       echo -e "${GREEN}✅ Escaneo de seguridad completado${NC}"
       echo "  📄 Reportes generados en:"
-      echo "     - $SECURITY_DIR/zap-baseline.html"
-      echo "     - $SECURITY_DIR/zap-baseline.json"
+      if [ -f "$SECURITY_DIR/zap-baseline.html" ]; then
+        echo "     - $SECURITY_DIR/zap-baseline.html"
+      fi
+      if [ -f "$SECURITY_DIR/zap-baseline.json" ]; then
+        echo "     - $SECURITY_DIR/zap-baseline.json"
+      fi
     fi
   fi
   
@@ -217,6 +245,32 @@ if [ "$RUN_COVERAGE" = true ]; then
   
   echo ""
 fi
+
+# ============================================================================
+# 5. ANÁLISIS DETALLADO DE REPORTES
+# ============================================================================
+echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
+echo -e "${BLUE}  🔍 Generando Análisis Detallado${NC}"
+echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
+
+if [ -f "scripts/analyze_test_reports.py" ]; then
+  echo "  → Generando análisis de reportes..."
+  python3 scripts/analyze_test_reports.py --latest 2>&1 | tail -50 || {
+    echo -e "${YELLOW}⚠️  No se pudo generar análisis detallado${NC}"
+  }
+  
+  # Generar también versión HTML
+  python3 scripts/analyze_test_reports.py --latest --html 2>&1 > /dev/null && {
+    ANALYSIS_HTML=$(ls -t test-results/analysis-*.html 2>/dev/null | head -1)
+    if [ -n "$ANALYSIS_HTML" ]; then
+      echo -e "${GREEN}  ✅ Análisis HTML generado: $ANALYSIS_HTML${NC}"
+    fi
+  }
+else
+  echo -e "${YELLOW}⚠️  Script de análisis no encontrado${NC}"
+fi
+
+echo ""
 
 # Estado final
 if [ -n "$BACKEND_FAILED" ] || [ -n "$FRONTEND_FAILED" ] || [ -n "$SECURITY_FAILED" ]; then

@@ -152,6 +152,24 @@ services:
       - ./frontend/pgf-frontend:/app
       - /app/node_modules
 
+  # OWASP ZAP para escaneos de seguridad
+  zap:
+    image: ghcr.io/zaproxy/zaproxy:stable
+    container_name: pgf-zap
+    restart: "no"
+    ports:
+      - "8080:8080"
+      - "8090:8090"
+    volumes:
+      - ./test-results/security:/zap/wrk/:rw
+    environment:
+      - ZAP_PORT=8080
+    networks:
+      - default
+    # No se inicia automáticamente, se ejecuta bajo demanda
+    profiles:
+      - security
+
 
 
 

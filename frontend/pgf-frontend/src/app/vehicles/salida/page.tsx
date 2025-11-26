@@ -91,20 +91,113 @@ export default function SalidaVehiculoPage() {
       });
 
       const text = await response.text();
-      let data;
+      
+      // Si la respuesta está vacía pero el status es exitoso, considerar éxito
+      if (response.ok && (!text || text.trim() === "" || text.trim() === "{}")) {
+        toast.success("Salida registrada correctamente");
+        setForm({
+          observaciones_salida: "",
+          kilometraje_salida: "",
+        });
+        setSelectedIngreso(null);
+        await cargarIngresos();
+        setLoading(false);
+        return;
+      }
+
+      // Intentar parsear como JSON
+      let data: any = {};
       try {
-        data = JSON.parse(text);
-      } catch {
-        data = { detail: text || "Error desconocido" };
+        if (text && text.trim() && text.trim() !== "{}") {
+          data = JSON.parse(text);
+        } else if (text && text.trim() === "{}") {
+          // Si es un objeto vacío, puede ser una respuesta exitosa
+          data = {};
+        }
+      } catch (e) {
+        // Si no es JSON válido, puede ser HTML (página de error) o texto plano
+        data = { 
+          detail: text || "Error desconocido",
+          raw: text.substring(0, 200), // Primeros 200 caracteres para debugging
+          parseError: String(e)
+        };
+      }
+
+      // Si la respuesta es exitosa y tiene datos, actualizar
+      if (response.ok) {
+        if (data && (data.id || Object.keys(data).length > 0)) {
+          toast.success("Salida registrada correctamente");
+          setForm({
+            observaciones_salida: "",
+            kilometraje_salida: "",
+          });
+          setSelectedIngreso(null);
+          await cargarIngresos();
+          setLoading(false);
+          return;
+        } else if (Object.keys(data).length === 0) {
+          // Respuesta exitosa pero vacía, considerar éxito
+          toast.success("Salida registrada correctamente");
+          setForm({
+            observaciones_salida: "",
+            kilometraje_salida: "",
+          });
+          setSelectedIngreso(null);
+          await cargarIngresos();
+          setLoading(false);
+          return;
+        }
       }
 
       if (!response.ok) {
-        // Mostrar mensaje de error específico
-        const errorMessage = data.detail || data.message || "Error al registrar salida";
+        // Construir mensaje de error más informativo
+        let errorMessage = "Error al registrar salida";
+        
+        // Si data está vacío pero hay texto, intentar parsear de nuevo
+        if (Object.keys(data).length === 0 && text && text.trim()) {
+          try {
+            const parsed = JSON.parse(text);
+            if (parsed && typeof parsed === 'object') {
+              data = parsed;
+            }
+          } catch {
+            // Si no se puede parsear, usar el texto como mensaje
+            data = { detail: text.substring(0, 200) };
+          }
+        }
+        
+        if (data.detail) {
+          errorMessage = data.detail;
+        } else if (data.message) {
+          errorMessage = data.message;
+        } else if (data.raw) {
+          errorMessage = data.raw;
+        } else if (text && text.trim()) {
+          errorMessage = text.substring(0, 100);
+        } else if (response.status === 403) {
+          errorMessage = "No tiene permisos para registrar salidas";
+        } else if (response.status === 400) {
+          errorMessage = "Solicitud inválida. Verifique los datos.";
+        } else if (response.status === 404) {
+          errorMessage = "Ingreso no encontrado";
+        } else if (response.status === 500) {
+          errorMessage = "Error interno del servidor";
+        } else {
+          errorMessage = `Error ${response.status}: ${response.statusText || "Error desconocido"}`;
+        }
+        
         toast.error(errorMessage);
         
         // Log para debugging
-        console.error("Error al registrar salida:", data);
+        console.error("Error al registrar salida:", {
+          status: response.status,
+          statusText: response.statusText,
+          url: ENDPOINTS.VEHICLES_SALIDA,
+          data: data,
+          text: text ? text.substring(0, 500) : "(vacío)",
+          isEmpty: Object.keys(data).length === 0,
+          responseType: response.headers.get("content-type"),
+        });
         setLoading(false);
         return;
       }

@@ -127,16 +127,32 @@ export default function JefeTallerAsignacionPage() {
         });
 
         const text = await response.text();
-        let data;
-        try {
-          data = JSON.parse(text);
-        } catch {
-          data = { detail: text || "Error desconocido" };
+        let data: any = {};
+        
+        // Intentar parsear JSON solo si hay contenido
+        if (text && text.trim() !== "") {
+          try {
+            data = JSON.parse(text);
+          } catch (e) {
+            // Si no es JSON válido, usar el texto como mensaje de error
+            data = { detail: text || "Error desconocido" };
+          }
+        } else {
+          // Si la respuesta está vacía, crear un mensaje basado en el status
+          data = { 
+            detail: `Error ${response.status}: ${response.statusText || "Error al asignar mecánico"}` 
+          };
         }
 
         if (!response.ok) {
-          toast.error(data.detail || "Error al asignar mecánico");
-          console.error("Error al asignar:", data);
+          const errorMessage = data.detail || data.message || data.error || `Error ${response.status}: ${response.statusText || "Error al asignar mecánico"}`;
+          toast.error(errorMessage);
+          console.error("Error al asignar:", {
+            status: response.status,
+            statusText: response.statusText,
+            data: data,
+            text: text
+          });
           return;
         }
 
@@ -156,16 +172,32 @@ export default function JefeTallerAsignacionPage() {
         });
 
         const text = await response.text();
-        let data;
-        try {
-          data = JSON.parse(text);
-        } catch {
-          data = { detail: text || "Error desconocido" };
+        let data: any = {};
+        
+        // Intentar parsear JSON solo si hay contenido
+        if (text && text.trim() !== "") {
+          try {
+            data = JSON.parse(text);
+          } catch (e) {
+            // Si no es JSON válido, usar el texto como mensaje de error
+            data = { detail: text || "Error desconocido" };
+          }
+        } else {
+          // Si la respuesta está vacía, crear un mensaje basado en el status
+          data = { 
+            detail: `Error ${response.status}: ${response.statusText || "Error al asignar mecánico"}` 
+          };
         }
 
         if (!response.ok) {
-          toast.error(data.detail || data.message || "Error al asignar mecánico");
-          console.error("Error al asignar:", data);
+          const errorMessage = data.detail || data.message || data.error || `Error ${response.status}: ${response.statusText || "Error al asignar mecánico"}`;
+          toast.error(errorMessage);
+          console.error("Error al asignar:", {
+            status: response.status,
+            statusText: response.statusText,
+            data: data,
+            text: text
+          });
           return;
         }
 

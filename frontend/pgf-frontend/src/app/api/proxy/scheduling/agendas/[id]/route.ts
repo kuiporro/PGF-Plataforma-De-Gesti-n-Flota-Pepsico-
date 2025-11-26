@@ -3,19 +3,21 @@ import { proxyFetch } from "../../../utils";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  return proxyFetch(`/scheduling/agendas/${params.id}/`, {
+  const { id } = await params;
+  return proxyFetch(`/scheduling/agendas/${id}/`, {
     method: "GET",
   });
 }
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const body = await request.json();
-  return proxyFetch(`/scheduling/agendas/${params.id}/`, {
+  return proxyFetch(`/scheduling/agendas/${id}/`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -24,9 +26,10 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  return proxyFetch(`/scheduling/agendas/${params.id}/`, {
+  const { id } = await params;
+  return proxyFetch(`/scheduling/agendas/${id}/`, {
     method: "DELETE",
   });
 }

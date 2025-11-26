@@ -305,6 +305,17 @@ test-results/
 
 1. **Docker instalado** (OWASP ZAP se ejecuta en un contenedor)
 2. **Servidor frontend corriendo** en `http://localhost:3000`
+3. **Docker Compose** (recomendado) o Docker standalone
+
+### Configuración con Docker Compose
+
+OWASP ZAP está configurado como servicio en `docker-compose.yml` con el perfil `security`. El script detecta automáticamente si Docker Compose está disponible y lo usa.
+
+**Ventajas de usar Docker Compose:**
+- ✅ Integración con la red de Docker Compose
+- ✅ Acceso directo a otros servicios (web, api)
+- ✅ Volúmenes compartidos configurados automáticamente
+- ✅ No requiere configuración adicional
 
 ### Verificar que el Servidor Esté Corriendo
 
@@ -321,9 +332,16 @@ docker compose up -d web
 
 **Qué es:** Escaneo rápido y no intrusivo que detecta vulnerabilidades comunes sin modificar datos.
 
-**Comando:**
+**Comando con Docker Compose (recomendado):**
 ```bash
+# El script detecta automáticamente Docker Compose
 ./scripts/owasp_zap_scan.sh baseline
+```
+
+**Comando con Docker standalone:**
+```bash
+# Si no tienes Docker Compose, el script usa Docker directamente
+USE_COMPOSE=false ./scripts/owasp_zap_scan.sh baseline
 ```
 
 **Tiempo estimado:** 2-5 minutos
@@ -359,19 +377,38 @@ docker compose up -d web
 - ⚠️ Cuando necesites análisis profundo
 - ❌ Nunca en producción
 
-### Escaneo vía API (ZAP Corriendo)
+### Escaneo vía API (ZAP como Daemon)
 
-Si tienes ZAP corriendo como servicio:
+Si necesitas ZAP corriendo como servicio continuo:
 
-1. **Iniciar ZAP:**
-   ```bash
-   docker run -d -p 8080:8080 owasp/zap2docker-stable zap.sh -daemon -host 0.0.0.0 -port 8080
-   ```
+**Con Docker Compose:**
+```bash
+# Iniciar ZAP como daemon
+docker compose --profile security up -d zap
 
-2. **Ejecutar escaneo:**
-   ```bash
-   ./scripts/owasp_zap_scan.sh api
-   ```
+# Ejecutar escaneo vía API
+./scripts/owasp_zap_scan.sh api
+
+# El script detendrá ZAP automáticamente al finalizar
+# Para mantenerlo corriendo:
+KEEP_ZAP_RUNNING=true ./scripts/owasp_zap_scan.sh api
+```
+
+**Con Docker standalone:**
+```bash
+# Iniciar ZAP
+docker run -d -p 8080:8080 --name zap ghcr.io/zaproxy/zaproxy:stable zap.sh -daemon -host 0.0.0.0 -port 8080
+
+# Ejecutar escaneo
+USE_COMPOSE=false ./scripts/owasp_zap_scan.sh api
+
+# Detener ZAP
+docker stop zap && docker rm zap
+```
+
+**Acceso a la API de ZAP:**
+- URL: `http://localhost:8080`
+- Interfaz web: `http://localhost:8090` (si está habilitada)
 
 ### Ver Reportes de OWASP ZAP
 

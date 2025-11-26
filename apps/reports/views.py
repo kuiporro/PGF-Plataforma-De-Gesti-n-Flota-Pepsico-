@@ -44,12 +44,12 @@ from apps.inventory.models import SolicitudRepuesto, MovimientoStock
 
 class DashboardEjecutivoView(views.APIView):
     """
-    Dashboard con KPIs para el ejecutivo.
+    Dashboard con KPIs para el ejecutivo y jefe de taller.
     
     Endpoint: GET /api/v1/reports/dashboard-ejecutivo/
     
     Permisos:
-    - Solo EJECUTIVO, ADMIN o SPONSOR
+    - EJECUTIVO, ADMIN, SPONSOR, JEFE_TALLER
     
     Características:
     - Caché de 2 minutos para optimizar rendimiento
@@ -101,8 +101,8 @@ class DashboardEjecutivoView(views.APIView):
         - select_related para reducir queries
         - Agregaciones eficientes con Django ORM
         """
-        # Verificar que el usuario tenga rol EJECUTIVO, ADMIN o SPONSOR
-        if request.user.rol not in ("EJECUTIVO", "ADMIN", "SPONSOR"):
+        # Verificar que el usuario tenga rol EJECUTIVO, ADMIN, SPONSOR o JEFE_TALLER
+        if request.user.rol not in ("EJECUTIVO", "ADMIN", "SPONSOR", "JEFE_TALLER"):
             return Response(
                 {"detail": "No autorizado para ver el dashboard ejecutivo."},
                 status=status.HTTP_403_FORBIDDEN

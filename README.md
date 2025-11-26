@@ -364,6 +364,31 @@ docker compose exec api poetry run python manage.py clear_all_data \
 
 **⚠️ Advertencia**: Este comando es destructivo y elimina permanentemente todos los datos. Úsalo con precaución.
 
+## 🌱 Seed de Datos de Prueba
+
+El proyecto incluye un comando para generar datos de prueba completos para todos los módulos.
+
+**Documentación completa**: Ver [docs/SEED_DATOS.md](docs/SEED_DATOS.md)
+
+### Uso Rápido
+
+```bash
+# Generar datos con valores por defecto
+docker compose exec api poetry run python manage.py seed_completo
+
+# Personalizar cantidades
+docker compose exec api poetry run python manage.py seed_completo \
+  --users 50 \
+  --vehicles 100 \
+  --workorders 150 \
+  --drivers 40 \
+  --emergencies 30 \
+  --agendas 50 \
+  --repuestos 200
+```
+
+**Credenciales por defecto:** Todos los usuarios tienen la contraseña `password123`
+
 ## 🧪 Testing
 
 Para información detallada sobre cómo ejecutar las pruebas, ver [docs/GUIA_PRUEBAS.md](docs/GUIA_PRUEBAS.md)

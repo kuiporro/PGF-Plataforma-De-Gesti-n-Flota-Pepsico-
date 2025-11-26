@@ -3,10 +3,10 @@ import { proxyFetch } from "../../../../utils";
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const body = await request.json();
-  return proxyFetch(`/work/ordenes/${params.id}/retrabajo/`, {
+  return proxyFetch(`/work/ordenes/${id}/retrabajo/`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

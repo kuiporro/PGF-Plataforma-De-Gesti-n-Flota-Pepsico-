@@ -3,9 +3,10 @@ import { proxyFetch } from "../../../utils";
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  return proxyFetch(`/emergencies/${params.id}/aprobar/`, {
+  const { id } = await params;
+  return proxyFetch(`/emergencies/${id}/aprobar/`, {
     method: "POST",
   });
 }
